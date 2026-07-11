@@ -892,6 +892,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "game-translator-engine-core"
+version = "0.1.0"
+
+[[package]]
+name = "game-translator-engine-rpgmaker"
+version = "0.1.0"
+dependencies = [
+ "game-translator-engine-core",
+ "serde_json",
+]
+
+[[package]]
 name = "gdk"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

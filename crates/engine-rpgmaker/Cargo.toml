@@ -1,0 +1,14 @@
+[package]
+name = "game-translator-engine-rpgmaker"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+game-translator-engine-core = { path = "../engine-core" }
+serde_json.workspace = true
+
+[lints]
+workspace = true
+
