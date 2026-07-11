@@ -1,0 +1,13 @@
+[package]
+name = "game-translator-translation-core"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+game-translator-provider-core = { path = "../provider-core" }
+
+[lints]
+workspace = true
+
