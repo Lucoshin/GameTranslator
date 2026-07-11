@@ -9,6 +9,11 @@ node_modules/
 dist/
 coverage/
 apps/desktop/src-tauri/icons/
+*.tsbuildinfo
+apps/desktop/vite.config.js
+apps/desktop/vite.config.d.ts
+apps/desktop/vitest.config.js
+apps/desktop/vitest.config.d.ts
 
 # Editors and OS
 .idea/
