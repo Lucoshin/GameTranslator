@@ -28,6 +28,7 @@ impl TranslationProvider for OpenAiCompatibleProvider {
         request: &TranslationRequest,
     ) -> Result<TranslationResponse, ProviderError> {
         let content = serde_json::to_string(&PromptPayload {
+            task: "Translate every segment into the target language. Preserve all <ph> tags exactly and return only the requested JSON object.",
             target_language: &request.target_language,
             segments: &request.segments,
         })
@@ -65,6 +66,7 @@ impl TranslationProvider for OpenAiCompatibleProvider {
 
 #[derive(Serialize)]
 struct PromptPayload<'a> {
+    task: &'a str,
     target_language: &'a str,
     segments: &'a [crate::TranslationInput],
 }

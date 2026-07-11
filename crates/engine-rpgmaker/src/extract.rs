@@ -85,6 +85,7 @@ fn extract_map(path: &Path, output: &mut Vec<Segment>) -> Result<(), EngineError
                 commands,
                 path,
                 &format!("events[{event_index}].pages[{page_index}]"),
+                &format!("events[{event_index}].pages[{page_index}]"),
             ));
         }
     }
@@ -105,6 +106,7 @@ fn extract_common_events(path: &Path, output: &mut Vec<Segment>) -> Result<(), E
             commands,
             path,
             &format!("records[{record_index}]"),
+            &format!("[{record_index}]"),
         ));
     }
     Ok(())
@@ -128,13 +130,14 @@ fn extract_database(path: &Path, output: &mut Vec<Segment>) -> Result<(), Engine
             else {
                 continue;
             };
-            let json_path = format!("records[{record_index}].{field}");
+            let id_path = format!("records[{record_index}].{field}");
+            let json_path = format!("[{record_index}].{field}");
             let file_name = path
                 .file_name()
                 .expect("database file must have a file name")
                 .to_string_lossy();
             output.push(Segment {
-                id: format!("{file_name}:{json_path}"),
+                id: format!("{file_name}:{id_path}"),
                 source: source.to_owned(),
                 source_file: path.to_path_buf(),
                 json_path,

@@ -1,4 +1,4 @@
-export function ProjectHome({ onOpenDemo }: { onOpenDemo: () => void }) {
+export function ProjectHome({ onSelect, onOpenDemo, error }: { onSelect: () => void; onOpenDemo: () => void; error: string | null }) {
   return (
     <main className="home-screen">
       <div className="paper-grain" />
@@ -18,11 +18,12 @@ export function ProjectHome({ onOpenDemo }: { onOpenDemo: () => void }) {
             为 RPG Maker MV / MZ 打造的一键汉化工作台。你持有模型密钥，原始游戏保持不变。
           </p>
           <div className="hero-actions">
-            <button className="primary-action" disabled title="目录选择将在桌面命令接入后启用">
+            <button className="primary-action" aria-label="选择游戏目录" onClick={onSelect}>
               选择游戏目录 <span>↗</span>
             </button>
             <button className="ghost-action" onClick={onOpenDemo}>载入演示项目</button>
           </div>
+          {error ? <p className="home-error" role="alert">{error}</p> : null}
           <p className="availability">首版支持未加密 RPG Maker MV / MZ 项目</p>
         </div>
 
@@ -50,4 +51,3 @@ export function ProjectHome({ onOpenDemo }: { onOpenDemo: () => void }) {
     </main>
   );
 }
-

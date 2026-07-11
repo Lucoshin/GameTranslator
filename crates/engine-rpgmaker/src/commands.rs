@@ -6,7 +6,8 @@ use serde_json::Value;
 pub(crate) fn extract_command_list(
     commands: &[Value],
     source_file: &Path,
-    path_prefix: &str,
+    id_prefix: &str,
+    json_prefix: &str,
 ) -> Vec<Segment> {
     let mut segments = Vec::new();
     let mut speaker = None;
@@ -28,9 +29,9 @@ pub(crate) fn extract_command_list(
             401 => push_parameter_segment(
                 &mut segments,
                 parameters,
-                0,
                 source_file,
-                &format!("{path_prefix}.list[{command_index}]"),
+                &format!("{id_prefix}.list[{command_index}]"),
+                &format!("{json_prefix}.list[{command_index}]"),
                 SegmentKind::Dialogue,
                 speaker.clone(),
             ),
@@ -41,12 +42,15 @@ pub(crate) fn extract_command_list(
                 {
                     for (choice_index, choice) in choices.iter().enumerate() {
                         if let Some(text) = choice.as_str().filter(|value| is_translatable(value)) {
+                            let id_path = format!(
+                                "{id_prefix}.list[{command_index}].parameters[0][{choice_index}]"
+                            );
                             let json_path = format!(
-                                "{path_prefix}.list[{command_index}].parameters[0][{choice_index}]"
+                                "{json_prefix}.list[{command_index}].parameters[0][{choice_index}]"
                             );
                             segments.push(new_segment(
                                 source_file,
-                                &json_path,
+                                &id_path,
                                 json_path.clone(),
                                 text,
                                 SegmentKind::Choice,
@@ -59,9 +63,9 @@ pub(crate) fn extract_command_list(
             405 => push_parameter_segment(
                 &mut segments,
                 parameters,
-                0,
                 source_file,
-                &format!("{path_prefix}.list[{command_index}]"),
+                &format!("{id_prefix}.list[{command_index}]"),
+                &format!("{json_prefix}.list[{command_index}]"),
                 SegmentKind::ScrollingText,
                 speaker.clone(),
             ),
@@ -76,14 +80,14 @@ pub(crate) fn extract_command_list(
 fn push_parameter_segment(
     segments: &mut Vec<Segment>,
     parameters: Option<&Vec<Value>>,
-    parameter_index: usize,
     source_file: &Path,
-    command_path: &str,
+    id_command_path: &str,
+    json_command_path: &str,
     kind: SegmentKind,
     speaker: Option<String>,
 ) {
     let Some(text) = parameters
-        .and_then(|values| values.get(parameter_index))
+        .and_then(|values| values.first())
         .and_then(Value::as_str)
         .filter(|value| is_translatable(value))
     else {
@@ -92,8 +96,8 @@ fn push_parameter_segment(
 
     segments.push(new_segment(
         source_file,
-        command_path,
-        format!("{command_path}.parameters[{parameter_index}]"),
+        id_command_path,
+        format!("{json_command_path}.parameters[0]"),
         text,
         kind,
         speaker,

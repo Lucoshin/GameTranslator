@@ -1,23 +1,90 @@
 import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { ExportPanel } from "./features/export/ExportPanel";
 import { ProjectHome } from "./features/projects/ProjectHome";
-import { ProjectOverview } from "./features/projects/ProjectOverview";
-import { ProviderDrawer } from "./features/providers/ProviderDrawer";
+import { ProjectOverview, type ProjectSummary } from "./features/projects/ProjectOverview";
+import { ProviderDrawer, type ProviderConfiguration } from "./features/providers/ProviderDrawer";
 import { SegmentTable } from "./features/review/SegmentTable";
 import { TranslationProgress } from "./features/translation/TranslationProgress";
 import "./styles/global.css";
 
 type View = "overview" | "translation" | "review" | "export";
+export type TranslationItem = { id: string; source: string; target: string; speaker: string | null; sourceFile: string };
+export type TranslationRun = { items: TranslationItem[]; warningFindings: number; blockingFindings: number; failedSegmentIds: string[] };
+type ExportResult = { outputPath: string; fileCount: number };
 
 export default function App() {
-  const [projectOpen, setProjectOpen] = useState(false);
+  const [project, setProject] = useState<ProjectSummary | null>(null);
+  const [openError, setOpenError] = useState<string | null>(null);
   const [view, setView] = useState<View>("overview");
   const [providerOpen, setProviderOpen] = useState(false);
-  const [model, setModel] = useState("未配置");
+  const [provider, setProvider] = useState<ProviderConfiguration | null>(null);
+  const [translation, setTranslation] = useState<TranslationRun | null>(null);
+  const [translationError, setTranslationError] = useState<string | null>(null);
+  const [translating, setTranslating] = useState(false);
+  const [exportResult, setExportResult] = useState<ExportResult | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
-  if (!projectOpen) {
-    return <ProjectHome onOpenDemo={() => setProjectOpen(true)} />;
+  if (!project) {
+    return (
+      <ProjectHome
+        error={openError}
+        onSelect={() => {
+          setOpenError(null);
+          void invoke<Omit<ProjectSummary, "demo">>("select_and_scan_project")
+            .then((result) => setProject({ ...result, demo: false }))
+            .catch((error: unknown) => setOpenError(String(error)));
+        }}
+        onOpenDemo={() => setProject({
+          projectPath: "D:\\Games\\Moonlit Shrine",
+          projectName: "月影神殿",
+          engine: "RPG Maker MZ",
+          segmentCount: 1284,
+          demo: true,
+        })}
+      />
+    );
   }
+
+  const startTranslation = () => {
+    if (project.demo) {
+      setView("translation");
+      return;
+    }
+    if (!provider) {
+      setProviderOpen(true);
+      return;
+    }
+    setTranslationError(null);
+    setTranslating(true);
+    setView("translation");
+    void invoke<TranslationRun>("translate_project", {
+      input: {
+        projectPath: project.projectPath,
+        provider: { ...provider, apiKey: null },
+      },
+    })
+      .then(setTranslation)
+      .catch((error: unknown) => setTranslationError(String(error)))
+      .finally(() => setTranslating(false));
+  };
+
+  const exportPatch = () => {
+    if (project.demo) return;
+    if (!translation) {
+      setExportError("没有可导出的翻译结果");
+      return;
+    }
+    setExportError(null);
+    setExporting(true);
+    void invoke<ExportResult>("export_translation_patch", {
+      input: { projectPath: project.projectPath, items: translation.items },
+    })
+      .then(setExportResult)
+      .catch((error: unknown) => setExportError(String(error)))
+      .finally(() => setExporting(false));
+  };
 
   return (
     <div className="app-shell">
@@ -31,7 +98,7 @@ export default function App() {
           <RailButton label="校对" active={view === "review"} onClick={() => setView("review")} glyph="校" />
           <RailButton label="导出" active={view === "export"} onClick={() => setView("export")} glyph="出" />
         </nav>
-        <button className="rail-exit" onClick={() => setProjectOpen(false)} aria-label="关闭项目">
+        <button className="rail-exit" onClick={() => setProject(null)} aria-label="关闭项目">
           ×
         </button>
       </aside>
@@ -39,11 +106,11 @@ export default function App() {
       <div className="workspace">
         <header className="topbar">
           <div>
-            <span className="eyebrow">PROJECT / 演示项目</span>
-            <strong>月影神殿</strong>
+            <span className="eyebrow">PROJECT / {project.demo ? "演示项目" : "本地项目"}</span>
+            <strong>{project.projectName}</strong>
           </div>
           <div className="topbar-actions">
-            <span className="model-chip"><i />{model}</span>
+            <span className="model-chip"><i />{provider?.model ?? "未配置"}</span>
             <button className="text-button" aria-label="顶部配置模型" onClick={() => setProviderOpen(true)}>配置模型</button>
           </div>
         </header>
@@ -51,28 +118,56 @@ export default function App() {
         <main className="content-stage">
           {view === "overview" ? (
             <ProjectOverview
+              project={project}
+              configured={provider !== null}
               onConfigure={() => setProviderOpen(true)}
-              onStart={() => setView("translation")}
+              onStart={startTranslation}
             />
           ) : null}
           {view === "translation" ? (
             <TranslationProgress
+              result={project.demo ? null : translation}
+              demo={project.demo}
+              loading={translating}
+              error={translationError}
               onReview={() => setView("review")}
               onExport={() => setView("export")}
             />
           ) : null}
-          {view === "review" ? <SegmentTable onExport={() => setView("export")} /> : null}
-          {view === "export" ? <ExportPanel /> : null}
+          {view === "review" ? (
+            <SegmentTable
+              items={project.demo ? undefined : translation?.items}
+              onChange={(id, target) => setTranslation((current) => current ? {
+                ...current,
+                items: current.items.map((item) => item.id === id ? { ...item, target } : item),
+              } : current)}
+              onExport={() => setView("export")}
+            />
+          ) : null}
+          {view === "export" ? (
+            <ExportPanel
+              demo={project.demo}
+              result={exportResult}
+              error={exportError}
+              exporting={exporting}
+              canExport={project.demo || translation !== null}
+              onExport={exportPatch}
+            />
+          ) : null}
         </main>
       </div>
 
       <ProviderDrawer
         open={providerOpen}
-        currentModel={model === "未配置" ? "" : model}
+        current={provider}
         onClose={() => setProviderOpen(false)}
-        onSave={(nextModel) => {
-          setModel(nextModel);
-          setProviderOpen(false);
+        onSave={(configuration) => {
+          void invoke("save_provider_configuration", { provider: configuration })
+            .then(() => {
+              setProvider(configuration);
+              setProviderOpen(false);
+            })
+            .catch((error: unknown) => setTranslationError(String(error)));
         }}
       />
     </div>

@@ -1,11 +1,14 @@
-const rows = [
+import type { TranslationItem } from "../../App";
+
+const demoRows = [
   ["アリス", "やっと着いた。 \\V[1]", "终于到了。 \\V[1]", "通过"],
   ["アリス", "ここが月の神殿ね。", "这里就是月之神殿。", "术语"],
   ["守衛", "通行証を見せろ。", "出示通行证。", "通过"],
   ["", "中に入る", "进入里面", "通过"],
 ];
 
-export function SegmentTable({ onExport }: { onExport: () => void }) {
+export function SegmentTable({ items, onChange, onExport }: { items?: TranslationItem[]; onChange?: (id: string, target: string) => void; onExport: () => void }) {
+  const rows = items?.map((item) => [item.speaker ?? "", item.source, item.target, "通过"] as const) ?? demoRows;
   return (
     <div className="page review-page">
       <section className="page-heading compact"><div><p className="kicker">HUMAN REVIEW</p><h1>文本校对</h1><p className="muted">演示数据 · Map001 / 入口事件</p></div><button className="primary-action" onClick={onExport}>导出补丁</button></section>
@@ -15,7 +18,7 @@ export function SegmentTable({ onExport }: { onExport: () => void }) {
         {rows.map(([speaker, source, target, qa], index) => (
           <article key={source} className={qa === "术语" ? "has-warning" : ""}>
             <span><b>{speaker || "选项"}</b><small>Map001 · #{index + 12}</small></span>
-            <span lang="ja">{source}</span><span contentEditable suppressContentEditableWarning>{target}</span>
+            <span lang="ja">{source}</span><span><textarea aria-label={`翻译 ${source}`} value={target} readOnly={!items} onChange={(event) => items && onChange?.(items[index].id, event.target.value)} /></span>
             <span><em className={qa === "术语" ? "qa warning" : "qa"}>{qa}</em></span>
           </article>
         ))}
@@ -23,4 +26,3 @@ export function SegmentTable({ onExport }: { onExport: () => void }) {
     </div>
   );
 }
-

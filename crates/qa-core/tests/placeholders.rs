@@ -1,4 +1,6 @@
-use game_translator_qa_core::{protect_placeholders, restore_placeholders, PlaceholderError};
+use game_translator_qa_core::{
+    protect_placeholders, restore_placeholders, validate_control_codes, PlaceholderError,
+};
 
 #[test]
 fn protects_and_restores_rpg_maker_control_codes() {
@@ -55,4 +57,11 @@ fn rejects_reordered_placeholders() {
             actual: vec![1, 0],
         }
     );
+}
+
+#[test]
+fn rejects_control_codes_changed_during_human_review() {
+    assert!(validate_control_codes("HP \\V[1]", "生命 \\V[2]").is_err());
+    assert!(validate_control_codes("HP \\V[1]", "生命").is_err());
+    assert!(validate_control_codes("HP \\V[1]", "生命 \\V[1]").is_ok());
 }

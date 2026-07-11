@@ -10,6 +10,7 @@ pub enum QaCode {
     UnchangedTranslation,
     LengthExceeded,
     LeakedPlaceholder,
+    ControlCodeMismatch,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

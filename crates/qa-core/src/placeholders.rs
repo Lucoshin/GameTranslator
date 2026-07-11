@@ -16,6 +16,7 @@ pub enum PlaceholderError {
         expected: Vec<usize>,
         actual: Vec<usize>,
     },
+    ContentMismatch,
     MalformedMarkup,
 }
 
@@ -35,7 +36,23 @@ impl fmt::Display for PlaceholderError {
                 )
             }
             Self::MalformedMarkup => formatter.write_str("malformed placeholder markup"),
+            Self::ContentMismatch => formatter.write_str("control codes changed"),
         }
+    }
+}
+
+/// Verifies that a reviewed translation preserves every original control code exactly.
+///
+/// # Errors
+///
+/// Returns [`PlaceholderError::ContentMismatch`] when codes are missing, added, or changed.
+pub fn validate_control_codes(source: &str, target: &str) -> Result<(), PlaceholderError> {
+    let source = protect_placeholders(source);
+    let target = protect_placeholders(target);
+    if source.originals == target.originals {
+        Ok(())
+    } else {
+        Err(PlaceholderError::ContentMismatch)
     }
 }
 
