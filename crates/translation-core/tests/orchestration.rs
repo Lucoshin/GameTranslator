@@ -98,7 +98,7 @@ fn skips_cached_segments_and_returns_all_results() {
         fail_large_batches: false,
     };
     let cached = HashMap::from([("a".to_string(), "缓存A".to_string())]);
-    let orchestrator = TranslationOrchestrator::new(&provider, "model", "zh-CN", 2);
+    let orchestrator = TranslationOrchestrator::new(&provider, "model", "auto", "zh-CN", 2);
 
     let result = orchestrator.run(&segments(), &cached, RunControl::Running);
 
@@ -113,7 +113,7 @@ fn paused_run_does_not_call_the_provider() {
         calls: Mutex::new(Vec::new()),
         fail_large_batches: false,
     };
-    let orchestrator = TranslationOrchestrator::new(&provider, "model", "zh-CN", 2);
+    let orchestrator = TranslationOrchestrator::new(&provider, "model", "auto", "zh-CN", 2);
 
     let result = orchestrator.run(&segments(), &HashMap::new(), RunControl::Paused);
 
@@ -127,7 +127,7 @@ fn splits_a_failed_batch_before_marking_segments_failed() {
         calls: Mutex::new(Vec::new()),
         fail_large_batches: true,
     };
-    let orchestrator = TranslationOrchestrator::new(&provider, "model", "zh-CN", 2);
+    let orchestrator = TranslationOrchestrator::new(&provider, "model", "auto", "zh-CN", 2);
 
     let result = orchestrator.run(&segments()[..2], &HashMap::new(), RunControl::Running);
 
@@ -141,7 +141,7 @@ fn retries_a_rate_limited_request_before_failing_it() {
     let provider = RateLimitedOnceProvider {
         calls: AtomicUsize::new(0),
     };
-    let orchestrator = TranslationOrchestrator::new(&provider, "model", "zh-CN", 1);
+    let orchestrator = TranslationOrchestrator::new(&provider, "model", "auto", "zh-CN", 1);
 
     let result = orchestrator.run(&segments()[..1], &HashMap::new(), RunControl::Running);
 

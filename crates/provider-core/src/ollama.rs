@@ -27,6 +27,7 @@ impl TranslationProvider for OllamaProvider {
     ) -> Result<TranslationResponse, ProviderError> {
         let content = serde_json::to_string(&PromptPayload {
             task: "Translate every segment into the target language. Preserve all <ph> tags exactly and return only the requested JSON object.",
+            source_language: &request.source_language,
             target_language: &request.target_language,
             segments: &request.segments,
         })
@@ -56,6 +57,7 @@ impl TranslationProvider for OllamaProvider {
 #[derive(Serialize)]
 struct PromptPayload<'a> {
     task: &'a str,
+    source_language: &'a str,
     target_language: &'a str,
     segments: &'a [crate::TranslationInput],
 }

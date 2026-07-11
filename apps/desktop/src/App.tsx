@@ -6,6 +6,7 @@ import { ProjectOverview, type ProjectSummary } from "./features/projects/Projec
 import { ProviderDrawer, type ProviderConfiguration } from "./features/providers/ProviderDrawer";
 import { SegmentTable } from "./features/review/SegmentTable";
 import { TranslationProgress } from "./features/translation/TranslationProgress";
+import { LanguageSettings, type Language } from "./features/translation/LanguageSettings";
 import "./styles/global.css";
 
 type View = "overview" | "translation" | "review" | "export";
@@ -19,6 +20,8 @@ export default function App() {
   const [view, setView] = useState<View>("overview");
   const [providerOpen, setProviderOpen] = useState(false);
   const [provider, setProvider] = useState<ProviderConfiguration | null>(null);
+  const [sourceLanguage, setSourceLanguage] = useState<Language>({ code: "auto", name: "自动检测" });
+  const [targetLanguage, setTargetLanguage] = useState<Language>({ code: "zh-CN", name: "简体中文" });
   const [translation, setTranslation] = useState<TranslationRun | null>(null);
   const [translationError, setTranslationError] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
@@ -63,6 +66,8 @@ export default function App() {
       input: {
         projectPath: project.projectPath,
         provider: { ...provider, apiKey: null },
+        sourceLanguage,
+        targetLanguage,
       },
     })
       .then(setTranslation)
@@ -79,7 +84,7 @@ export default function App() {
     setExportError(null);
     setExporting(true);
     void invoke<ExportResult>("export_translation_patch", {
-      input: { projectPath: project.projectPath, items: translation.items },
+      input: { projectPath: project.projectPath, items: translation.items, targetLanguage },
     })
       .then(setExportResult)
       .catch((error: unknown) => setExportError(String(error)))
@@ -116,6 +121,7 @@ export default function App() {
         </header>
 
         <main className="content-stage">
+          {view === "overview" ? <LanguageSettings source={sourceLanguage} target={targetLanguage} onSourceChange={setSourceLanguage} onTargetChange={setTargetLanguage} /> : null}
           {view === "overview" ? (
             <ProjectOverview
               project={project}
@@ -142,6 +148,7 @@ export default function App() {
                 items: current.items.map((item) => item.id === id ? { ...item, target } : item),
               } : current)}
               onExport={() => setView("export")}
+              targetLanguage={targetLanguage}
             />
           ) : null}
           {view === "export" ? (
@@ -152,6 +159,7 @@ export default function App() {
               exporting={exporting}
               canExport={project.demo || translation !== null}
               onExport={exportPatch}
+              targetLanguage={targetLanguage}
             />
           ) : null}
         </main>

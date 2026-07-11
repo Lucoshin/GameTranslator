@@ -34,6 +34,7 @@ fn mock_server(status: u16, body: &'static str) -> String {
 fn request() -> TranslationRequest {
     TranslationRequest {
         model: "test-model".into(),
+        source_language: "ja-JP".into(),
         target_language: "zh-CN".into(),
         segments: vec![TranslationInput {
             id: "segment-1".into(),

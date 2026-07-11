@@ -67,14 +67,24 @@ describe("project flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
     await screen.findByText("test-model");
 
+    fireEvent.change(screen.getByLabelText("源语言"), { target: { value: "ja-JP" } });
+    fireEvent.change(screen.getByLabelText("目标语言"), { target: { value: "en-US" } });
+
     fireEvent.click(screen.getByRole("button", { name: "开始汉化" }));
 
     expect(await screen.findByRole("heading", { name: "翻译任务" })).toBeVisible();
     expect(screen.getByText("1 / 1")).toBeVisible();
     expect(invoke).toHaveBeenNthCalledWith(2, "save_provider_configuration", expect.any(Object));
     expect(invoke).toHaveBeenNthCalledWith(3, "translate_project", expect.any(Object));
+    expect(vi.mocked(invoke).mock.calls[2][1]).toMatchObject({
+      input: {
+        sourceLanguage: { code: "ja-JP", name: "日语" },
+        targetLanguage: { code: "en-US", name: "英语" },
+      },
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "校对文本" }));
+    expect(screen.getByText("英语")).toBeVisible();
     fireEvent.change(screen.getByDisplayValue("终于到了。 \\V[1]"), {
       target: { value: "总算到了。 \\V[1]" },
     });
@@ -84,7 +94,10 @@ describe("project flow", () => {
     expect(await screen.findByText("D:\\Exports\\RealGame-zhCN")).toBeVisible();
     expect(invoke).toHaveBeenNthCalledWith(4, "export_translation_patch", expect.any(Object));
     expect(vi.mocked(invoke).mock.calls[3][1]).toMatchObject({
-      input: { items: [{ target: "总算到了。 \\V[1]" }] },
+      input: {
+        targetLanguage: { code: "en-US", name: "英语" },
+        items: [{ target: "总算到了。 \\V[1]" }],
+      },
     });
   });
 

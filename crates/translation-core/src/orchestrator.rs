@@ -29,6 +29,7 @@ pub struct RunResult {
 pub struct TranslationOrchestrator<'a> {
     provider: &'a dyn TranslationProvider,
     model: String,
+    source_language: String,
     target_language: String,
     maximum_batch_size: usize,
 }
@@ -38,12 +39,14 @@ impl<'a> TranslationOrchestrator<'a> {
     pub fn new(
         provider: &'a dyn TranslationProvider,
         model: impl Into<String>,
+        source_language: impl Into<String>,
         target_language: impl Into<String>,
         maximum_batch_size: usize,
     ) -> Self {
         Self {
             provider,
             model: model.into(),
+            source_language: source_language.into(),
             target_language: target_language.into(),
             maximum_batch_size: maximum_batch_size.max(1),
         }
@@ -107,6 +110,7 @@ impl<'a> TranslationOrchestrator<'a> {
     ) -> Result<TranslationResponse, game_translator_provider_core::ProviderError> {
         let request = TranslationRequest {
             model: self.model.clone(),
+            source_language: self.source_language.clone(),
             target_language: self.target_language.clone(),
             segments: batch
                 .iter()

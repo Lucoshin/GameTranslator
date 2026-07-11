@@ -1,3 +1,5 @@
+import type { Language } from "../translation/LanguageSettings";
+
 type ExportResult = { outputPath: string; fileCount: number };
 
 export function ExportPanel({
@@ -7,6 +9,7 @@ export function ExportPanel({
   exporting,
   canExport,
   onExport,
+  targetLanguage,
 }: {
   demo: boolean;
   result: ExportResult | null;
@@ -14,6 +17,7 @@ export function ExportPanel({
   exporting: boolean;
   canExport: boolean;
   onExport: () => void;
+  targetLanguage: Language;
 }) {
   const fileCount = demo ? 24 : (result?.fileCount ?? 0);
   return (
@@ -25,15 +29,14 @@ export function ExportPanel({
         <section className="panel export-summary">
           <div className="panel-title"><span>导出清单</span><small>PATCH MANIFEST</small></div>
           <div className="file-stack"><i/><i/><i/><div><strong>{fileCount}</strong><span>个翻译文件</span></div></div>
-          <dl><div><dt>补丁格式</dt><dd>GameTranslator Patch v1</dd></div><div><dt>目标语言</dt><dd>简体中文 zh-CN</dd></div><div><dt>完整性</dt><dd className="safe">SHA-256 已校验</dd></div></dl>
+          <dl><div><dt>补丁格式</dt><dd>GameTranslator Patch v1</dd></div><div><dt>目标语言</dt><dd>{targetLanguage.name} {targetLanguage.code}</dd></div><div><dt>完整性</dt><dd className="safe">SHA-256 已校验</dd></div></dl>
         </section>
         <section className="panel export-action">
           <div className="safety-callout"><span>只读</span><div><b>原始游戏保持不变</b><p>补丁将写入新的目录，并附带文件哈希与恢复说明。</p></div></div>
-          <p className="muted">点击生成后选择父目录，应用会创建独立的 <b>游戏名-zhCN</b> 文件夹。</p>
+          <p className="muted">点击生成后选择父目录，应用会创建独立的 <b>游戏名-{targetLanguage.code}</b> 文件夹。</p>
           <button className="primary-action full" aria-label="生成汉化补丁" disabled={!canExport || exporting} onClick={onExport}>{exporting ? "正在生成…" : "生成汉化补丁"} <span>↗</span></button>
         </section>
       </div>
     </div>
   );
 }
-

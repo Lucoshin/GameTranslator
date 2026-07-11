@@ -36,6 +36,15 @@ struct ProviderInput {
 struct TranslateCommandInput {
     project_path: String,
     provider: ProviderInput,
+    source_language: LanguageInput,
+    target_language: LanguageInput,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LanguageInput {
+    code: String,
+    name: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -62,6 +71,7 @@ struct TranslationRunResult {
 struct ExportCommandInput {
     project_path: String,
     items: Vec<TranslationItem>,
+    target_language: LanguageInput,
 }
 
 #[derive(Debug, Serialize)]
@@ -123,6 +133,8 @@ fn save_provider_configuration(provider: ProviderInput) -> Result<(), String> {
 fn translate_project(input: TranslateCommandInput) -> Result<TranslationRunResult, String> {
     let TranslateCommandInput {
         project_path,
+        source_language,
+        target_language,
         provider:
             ProviderInput {
                 kind,
@@ -141,13 +153,29 @@ fn translate_project(input: TranslateCommandInput) -> Result<TranslationRunResul
             .ok_or_else(|| "尚未保存 API Key".to_owned())?;
         Box::new(OpenAiCompatibleProvider::new(&base_url, api_key))
     };
-    translate_path_with_provider(Path::new(&project_path), provider.as_ref(), &model)
+    translate_path_with_provider(
+        Path::new(&project_path),
+        provider.as_ref(),
+        &model,
+        &language_prompt(&source_language),
+        &language_prompt(&target_language),
+    )
+}
+
+fn language_prompt(language: &LanguageInput) -> String {
+    if language.code == "auto" {
+        "Auto-detect the source language".to_owned()
+    } else {
+        format!("{} ({})", language.name, language.code)
+    }
 }
 
 fn translate_path_with_provider(
     path: &Path,
     provider: &dyn TranslationProvider,
     model: &str,
+    source_language: &str,
+    target_language: &str,
 ) -> Result<TranslationRunResult, String> {
     let project = detect_project(path).map_err(|error| error.to_string())?;
     let segments = extract_project(&project).map_err(|error| error.to_string())?;
@@ -161,7 +189,8 @@ fn translate_path_with_provider(
             TranslationSegment::new(&segment.id, segment.source_file.to_string_lossy(), source)
         })
         .collect::<Vec<_>>();
-    let orchestrator = TranslationOrchestrator::new(provider, model, "zh-CN", 20);
+    let orchestrator =
+        TranslationOrchestrator::new(provider, model, source_language, target_language, 20);
     let run = orchestrator.run(&translation_segments, &HashMap::new(), RunControl::Running);
     let mut items = Vec::with_capacity(run.translations.len());
     let mut warning_findings = 0;
@@ -212,7 +241,13 @@ fn export_translation_patch(input: ExportCommandInput) -> Result<ExportResult, S
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("game");
-    let output = parent.join(format!("{project_name}-zhCN"));
+    let language_suffix = input
+        .target_language
+        .code
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric() || *character == '-')
+        .collect::<String>();
+    let output = parent.join(format!("{project_name}-{language_suffix}"));
     export_path(&project_path, &input.items, &output)
 }
 
@@ -316,8 +351,14 @@ mod tests {
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../../fixtures/rpgmaker-mz-dialogue");
 
-        let result =
-            super::translate_path_with_provider(&fixture, &FakeProvider, "test-model").unwrap();
+        let result = super::translate_path_with_provider(
+            &fixture,
+            &FakeProvider,
+            "test-model",
+            "Auto-detect the source language",
+            "简体中文 (zh-CN)",
+        )
+        .unwrap();
 
         assert_eq!(result.items.len(), 10);
         let dialogue = result
@@ -338,8 +379,14 @@ mod tests {
             std::process::id()
         ));
         let _ = std::fs::remove_dir_all(&output);
-        let translated =
-            super::translate_path_with_provider(&fixture, &FakeProvider, "test-model").unwrap();
+        let translated = super::translate_path_with_provider(
+            &fixture,
+            &FakeProvider,
+            "test-model",
+            "Auto-detect the source language",
+            "简体中文 (zh-CN)",
+        )
+        .unwrap();
 
         let result = super::export_path(&fixture, &translated.items, &output).unwrap();
 

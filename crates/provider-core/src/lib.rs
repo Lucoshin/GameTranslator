@@ -17,6 +17,7 @@ pub struct TranslationInput {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct TranslationRequest {
     pub model: String,
+    pub source_language: String,
     pub target_language: String,
     pub segments: Vec<TranslationInput>,
 }
