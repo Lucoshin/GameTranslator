@@ -1,5 +1,10 @@
+mod credentials;
 mod patch;
 
+pub use credentials::{
+    CredentialError, CredentialStore, InMemoryCredentialStore, ProviderConfiguration,
+    WindowsCredentialStore,
+};
 pub use patch::{PatchError, PatchFile, PatchManifest, PatchPlan};
 
 #[must_use]

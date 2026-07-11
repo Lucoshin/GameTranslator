@@ -1,3 +1,3 @@
 fn main() {
-    game_translator_desktop::run();
+    game_translator_desktop_lib::run();
 }

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="72" fill="#c94b32"/>
+  <rect x="30" y="30" width="452" height="452" rx="52" fill="none" stroke="#f7efe2" stroke-width="18" opacity=".72"/>
+  <path d="M116 116h280v280H116z" fill="none" stroke="#f7efe2" stroke-width="8" opacity=".34"/>
+  <text x="256" y="344" text-anchor="middle" font-family="serif" font-size="246" font-weight="700" fill="#fffaf1">译</text>
+</svg>
+

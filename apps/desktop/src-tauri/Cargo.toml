@@ -7,14 +7,15 @@ rust-version.workspace = true
 version.workspace = true
 
 [lib]
+name = "game_translator_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
 game-translator-app-core = { path = "../../../crates/app-core" }
-tauri = "2.8"
+tauri = { version = "2.8", features = [] }
 
 [build-dependencies]
-tauri-build = "2.4"
+tauri-build = { version = "2.4", features = [] }
 
 [lints]
 workspace = true
