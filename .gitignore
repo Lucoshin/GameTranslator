@@ -15,6 +15,7 @@ apps/desktop/vitest.config.js
 apps/desktop/vitest.config.d.ts
 output/
 apps/desktop/src-tauri/icons/android/
+apps/desktop/src-tauri/icons/ios/
 apps/desktop/src-tauri/icons/AppIcon-*.png
 apps/desktop/src-tauri/icons/Square*.png
 apps/desktop/src-tauri/icons/StoreLogo.png
