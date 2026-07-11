@@ -1,0 +1,20 @@
+[package]
+name = "game-translator-desktop"
+build = "build.rs"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+game-translator-app-core = { path = "../../../crates/app-core" }
+tauri = "2.8"
+
+[build-dependencies]
+tauri-build = "2.4"
+
+[lints]
+workspace = true
