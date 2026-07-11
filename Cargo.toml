@@ -4,6 +4,7 @@ members = [
     "crates/app-core",
     "crates/engine-core",
     "crates/engine-rpgmaker",
+    "crates/qa-core",
 ]
 resolver = "2"
 
