@@ -1,0 +1,16 @@
+[
+  null,
+  {
+    "id": 1,
+    "name": "回復薬",
+    "description": "HPを50回復する。",
+    "note": "img/icons/potion.png"
+  },
+  {
+    "id": 2,
+    "name": "12345",
+    "description": "   ",
+    "note": ""
+  }
+]
+

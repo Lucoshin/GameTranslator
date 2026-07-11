@@ -1,0 +1,14 @@
+[
+  null,
+  {
+    "id": 1,
+    "name": "Introduction",
+    "list": [
+      { "code": 101, "indent": 0, "parameters": ["", 0, 0, 2, "語り手"] },
+      { "code": 401, "indent": 0, "parameters": ["共通イベントの台詞"] },
+      { "code": 355, "indent": 0, "parameters": ["$gameParty.gainGold(100);"] },
+      { "code": 0, "indent": 0, "parameters": [] }
+    ]
+  }
+]
+
