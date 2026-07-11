@@ -1,0 +1,16 @@
+:root {
+  --paper: #f1ede3;
+  --paper-deep: #e5ded0;
+  --ink: #1e211d;
+  --ink-soft: #62655d;
+  --line: #cfc7b8;
+  --vermillion: #c94b32;
+  --vermillion-dark: #913522;
+  --moss: #556b58;
+  --gold: #b38a42;
+  --white: #fbfaf6;
+  --shadow: 0 20px 60px rgba(58, 49, 35, 0.12);
+  --display: "Noto Serif SC", "Source Han Serif SC", Georgia, serif;
+  --body: "IBM Plex Sans", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+}
+
