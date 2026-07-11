@@ -960,6 +960,14 @@ dependencies = [
 [[package]]
 name = "game-translator-app-core"
 version = "0.1.0"
+dependencies = [
+ "game-translator-engine-core",
+ "game-translator-engine-rpgmaker",
+ "game-translator-qa-core",
+ "serde",
+ "serde_json",
+ "sha2",
+]
 
 [[package]]
 name = "game-translator-desktop"

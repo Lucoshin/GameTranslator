@@ -30,7 +30,7 @@ pub(crate) fn extract_command_list(
                 parameters,
                 0,
                 source_file,
-                format!("{path_prefix}.list[{command_index}]"),
+                &format!("{path_prefix}.list[{command_index}]"),
                 SegmentKind::Dialogue,
                 speaker.clone(),
             ),
@@ -46,7 +46,8 @@ pub(crate) fn extract_command_list(
                             );
                             segments.push(new_segment(
                                 source_file,
-                                json_path,
+                                &json_path,
+                                json_path.clone(),
                                 text,
                                 SegmentKind::Choice,
                                 speaker.clone(),
@@ -60,7 +61,7 @@ pub(crate) fn extract_command_list(
                 parameters,
                 0,
                 source_file,
-                format!("{path_prefix}.list[{command_index}]"),
+                &format!("{path_prefix}.list[{command_index}]"),
                 SegmentKind::ScrollingText,
                 speaker.clone(),
             ),
@@ -77,7 +78,7 @@ fn push_parameter_segment(
     parameters: Option<&Vec<Value>>,
     parameter_index: usize,
     source_file: &Path,
-    json_path: String,
+    command_path: &str,
     kind: SegmentKind,
     speaker: Option<String>,
 ) {
@@ -89,11 +90,19 @@ fn push_parameter_segment(
         return;
     };
 
-    segments.push(new_segment(source_file, json_path, text, kind, speaker));
+    segments.push(new_segment(
+        source_file,
+        command_path,
+        format!("{command_path}.parameters[{parameter_index}]"),
+        text,
+        kind,
+        speaker,
+    ));
 }
 
 fn new_segment(
     source_file: &Path,
+    id_path: &str,
     json_path: String,
     source: &str,
     kind: SegmentKind,
@@ -105,7 +114,7 @@ fn new_segment(
         .to_string_lossy();
 
     Segment {
-        id: format!("{file_name}:{json_path}"),
+        id: format!("{file_name}:{id_path}"),
         source: source.to_owned(),
         source_file: source_file.to_path_buf(),
         json_path,

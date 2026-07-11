@@ -25,6 +25,10 @@ fn extracts_map_dialogue_choices_and_scrolling_text_with_context() {
         Some("ここが月の神殿ね。")
     );
     assert_eq!(map_segments[0].id, "Map001.json:events[1].pages[0].list[1]");
+    assert_eq!(
+        map_segments[0].json_path,
+        "events[1].pages[0].list[1].parameters[0]"
+    );
     assert_eq!(map_segments[2].kind, SegmentKind::Choice);
     assert_eq!(map_segments[2].source, "中に入る");
     assert_eq!(map_segments[4].kind, SegmentKind::ScrollingText);

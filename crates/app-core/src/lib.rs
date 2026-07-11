@@ -1,3 +1,7 @@
+mod patch;
+
+pub use patch::{PatchError, PatchFile, PatchManifest, PatchPlan};
+
 #[must_use]
 pub const fn product_name() -> &'static str {
     "GameTranslator"
