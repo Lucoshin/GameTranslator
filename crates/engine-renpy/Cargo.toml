@@ -1,0 +1,12 @@
+[package]
+name = "game-translator-engine-renpy"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+game-translator-engine-core = { path = "../engine-core" }
+
+[lints]
+workspace = true

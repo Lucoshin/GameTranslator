@@ -8,6 +8,7 @@ version.workspace = true
 [dependencies]
 game-translator-engine-core = { path = "../engine-core" }
 game-translator-engine-rpgmaker = { path = "../engine-rpgmaker" }
+game-translator-engine-renpy = { path = "../engine-renpy" }
 game-translator-qa-core = { path = "../qa-core" }
 serde.workspace = true
 serde_json.workspace = true

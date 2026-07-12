@@ -1245,6 +1245,7 @@ name = "game-translator-app-core"
 version = "0.1.0"
 dependencies = [
  "game-translator-engine-core",
+ "game-translator-engine-renpy",
  "game-translator-engine-rpgmaker",
  "game-translator-qa-core",
  "keyring",
@@ -1259,7 +1260,6 @@ version = "0.1.0"
 dependencies = [
  "game-translator-app-core",
  "game-translator-engine-core",
- "game-translator-engine-rpgmaker",
  "game-translator-provider-core",
  "game-translator-qa-core",
  "game-translator-translation-core",
@@ -1272,6 +1272,13 @@ dependencies = [
 [[package]]
 name = "game-translator-engine-core"
 version = "0.1.0"
+
+[[package]]
+name = "game-translator-engine-renpy"
+version = "0.1.0"
+dependencies = [
+ "game-translator-engine-core",
+]
 
 [[package]]
 name = "game-translator-engine-rpgmaker"

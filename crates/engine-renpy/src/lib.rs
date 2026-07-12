@@ -1,15 +1,16 @@
-mod commands;
 mod detect;
-mod extract;
+mod generate;
+mod template;
 mod write;
 
 pub use detect::detect_project;
-pub use extract::extract_project;
+pub use generate::generate_templates;
+pub use template::{extract_project, extract_templates};
 pub use write::write_translations;
 
-pub struct RpgMakerAdapter;
+pub struct RenPyAdapter;
 
-impl game_translator_engine_core::EngineAdapter for RpgMakerAdapter {
+impl game_translator_engine_core::EngineAdapter for RenPyAdapter {
     fn detect(
         &self,
         root: &std::path::Path,

@@ -4,6 +4,7 @@ members = [
     "crates/app-core",
     "crates/engine-core",
     "crates/engine-rpgmaker",
+    "crates/engine-renpy",
     "crates/qa-core",
     "crates/project-store",
     "crates/provider-core",

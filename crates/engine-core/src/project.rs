@@ -4,6 +4,7 @@ use std::path::PathBuf;
 pub enum EngineKind {
     RpgMakerMv,
     RpgMakerMz,
+    RenPy,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

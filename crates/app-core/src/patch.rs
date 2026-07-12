@@ -2,8 +2,7 @@ use std::{
     collections::HashMap, error::Error, fmt, fs, hash::BuildHasher, path::Path, path::PathBuf,
 };
 
-use game_translator_engine_core::DetectedProject;
-use game_translator_engine_rpgmaker::{extract_project, write_translations};
+use game_translator_engine_core::{DetectedProject, EngineKind};
 use game_translator_qa_core::{QaFinding, QaSeverity};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -63,7 +62,7 @@ impl PatchPlan {
     /// Returns [`PatchError`] when extraction or source hashing fails.
     pub fn capture(project: DetectedProject) -> Result<Self, PatchError> {
         let segments =
-            extract_project(&project).map_err(|error| PatchError::Engine(error.to_string()))?;
+            crate::extract_game(&project).map_err(|error| PatchError::Engine(error.to_string()))?;
         let mut source_hashes = HashMap::new();
         for segment in segments {
             if !source_hashes.contains_key(&segment.source_file) {
@@ -90,6 +89,20 @@ impl PatchPlan {
         findings: &[QaFinding],
         output_root: &Path,
     ) -> Result<PatchManifest, PatchError> {
+        self.export_for_language(translations, findings, output_root, "zh-CN")
+    }
+
+    /// Exports an engine-native patch for the requested target language.
+    ///
+    /// # Errors
+    /// Returns [`PatchError`] for blocking QA, changed sources, or engine write failures.
+    pub fn export_for_language<S: BuildHasher>(
+        &self,
+        translations: &HashMap<String, String, S>,
+        findings: &[QaFinding],
+        output_root: &Path,
+        language: &str,
+    ) -> Result<PatchManifest, PatchError> {
         if findings
             .iter()
             .any(|finding| finding.severity == QaSeverity::Blocking)
@@ -102,8 +115,22 @@ impl PatchPlan {
             }
         }
 
-        let written = write_translations(&self.project, translations, output_root)
-            .map_err(|error| PatchError::Engine(error.to_string()))?;
+        let written = match self.project.engine {
+            EngineKind::RpgMakerMv | EngineKind::RpgMakerMz => {
+                game_translator_engine_rpgmaker::write_translations(
+                    &self.project,
+                    translations,
+                    output_root,
+                )
+            }
+            EngineKind::RenPy => game_translator_engine_renpy::write_translations(
+                &self.project,
+                translations,
+                output_root,
+                language,
+            ),
+        }
+        .map_err(|error| PatchError::Engine(error.to_string()))?;
         let mut files = Vec::with_capacity(written.len());
         for target_path in written {
             let relative_path = target_path
@@ -113,10 +140,18 @@ impl PatchPlan {
                     message: error.to_string(),
                 })?
                 .to_path_buf();
-            let source_path = self.project.root.join(&relative_path);
+            let source_sha256 = if self.project.engine == EngineKind::RenPy {
+                self.source_hashes
+                    .values()
+                    .next()
+                    .cloned()
+                    .unwrap_or_default()
+            } else {
+                hash_file(&self.project.root.join(&relative_path))?
+            };
             files.push(PatchFile {
                 relative_path,
-                source_sha256: hash_file(&source_path)?,
+                source_sha256,
                 target_sha256: hash_file(&target_path)?,
             });
         }

@@ -13,7 +13,6 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [dependencies]
 game-translator-app-core = { path = "../../../crates/app-core" }
 game-translator-engine-core = { path = "../../../crates/engine-core" }
-game-translator-engine-rpgmaker = { path = "../../../crates/engine-rpgmaker" }
 game-translator-provider-core = { path = "../../../crates/provider-core" }
 game-translator-qa-core = { path = "../../../crates/qa-core" }
 game-translator-translation-core = { path = "../../../crates/translation-core" }

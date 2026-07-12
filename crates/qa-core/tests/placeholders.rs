@@ -65,3 +65,21 @@ fn rejects_control_codes_changed_during_human_review() {
     assert!(validate_control_codes("HP \\V[1]", "生命").is_err());
     assert!(validate_control_codes("HP \\V[1]", "生命 \\V[1]").is_ok());
 }
+
+#[test]
+fn protects_and_restores_renpy_interpolation_and_text_tags() {
+    let protected = protect_placeholders("[mc]获得了{color=#f00}[player.score]{/color}分");
+
+    assert_eq!(
+        protected.text,
+        "<ph id=\"0\"/>获得了<ph id=\"1\"/><ph id=\"2\"/><ph id=\"3\"/>分"
+    );
+    assert_eq!(
+        restore_placeholders(
+            &protected,
+            "<ph id=\"0\"/> scored <ph id=\"1\"/><ph id=\"2\"/><ph id=\"3\"/> points"
+        )
+        .unwrap(),
+        "[mc] scored {color=#f00}[player.score]{/color} points"
+    );
+}

@@ -121,6 +121,9 @@ pub fn restore_placeholders(
 }
 
 fn control_code_length(value: &str) -> Option<usize> {
+    if let Some(length) = renpy_token_length(value) {
+        return Some(length);
+    }
     let bytes = value.as_bytes();
     if bytes.len() < 5
         || bytes[0] != b'\\'
@@ -136,6 +139,17 @@ fn control_code_length(value: &str) -> Option<usize> {
         index += 1;
     }
     (index > digits_start && bytes.get(index) == Some(&b']')).then_some(index + 1)
+}
+
+fn renpy_token_length(value: &str) -> Option<usize> {
+    let bytes = value.as_bytes();
+    let closing = match bytes.first()? {
+        b'[' if bytes.get(1) != Some(&b'[') => b']',
+        b'{' if bytes.get(1) != Some(&b'{') => b'}',
+        _ => return None,
+    };
+    let end = bytes[1..].iter().position(|byte| *byte == closing)? + 1;
+    (end > 1 && !bytes[1..end].contains(&b'\n')).then_some(end + 1)
 }
 
 struct PlaceholderOccurrence {

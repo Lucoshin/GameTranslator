@@ -1,10 +1,12 @@
 mod credentials;
+mod engine;
 mod patch;
 
 pub use credentials::{
     CredentialError, CredentialStore, InMemoryCredentialStore, ProviderConfiguration,
     WindowsCredentialStore,
 };
+pub use engine::{detect_game, engine_name, extract_game};
 pub use patch::{PatchError, PatchFile, PatchManifest, PatchPlan};
 
 #[must_use]

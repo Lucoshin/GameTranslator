@@ -1,8 +1,8 @@
 use std::{collections::HashMap, path::Path, path::PathBuf};
 
-use game_translator_app_core::{CredentialStore, PatchPlan, WindowsCredentialStore};
-use game_translator_engine_core::EngineKind;
-use game_translator_engine_rpgmaker::{detect_project, extract_project};
+use game_translator_app_core::{
+    detect_game, engine_name, extract_game, CredentialStore, PatchPlan, WindowsCredentialStore,
+};
 use game_translator_provider_core::{
     OllamaProvider, OpenAiCompatibleProvider, TranslationProvider,
 };
@@ -91,12 +91,9 @@ fn select_and_scan_project() -> Result<ScanResult, String> {
 }
 
 fn scan_path(path: &Path) -> Result<ScanResult, String> {
-    let project = detect_project(path).map_err(|error| error.to_string())?;
-    let segments = extract_project(&project).map_err(|error| error.to_string())?;
-    let engine = match project.engine {
-        EngineKind::RpgMakerMv => "RPG Maker MV",
-        EngineKind::RpgMakerMz => "RPG Maker MZ",
-    };
+    let project = detect_game(path).map_err(|error| error.to_string())?;
+    let segments = extract_game(&project).map_err(|error| error.to_string())?;
+    let engine = engine_name(project.engine);
     Ok(ScanResult {
         project_path: path.to_string_lossy().into_owned(),
         project_name: path
@@ -177,8 +174,8 @@ fn translate_path_with_provider(
     source_language: &str,
     target_language: &str,
 ) -> Result<TranslationRunResult, String> {
-    let project = detect_project(path).map_err(|error| error.to_string())?;
-    let segments = extract_project(&project).map_err(|error| error.to_string())?;
+    let project = detect_game(path).map_err(|error| error.to_string())?;
+    let segments = extract_game(&project).map_err(|error| error.to_string())?;
     let mut protected = HashMap::new();
     let translation_segments = segments
         .iter()
@@ -248,15 +245,21 @@ fn export_translation_patch(input: ExportCommandInput) -> Result<ExportResult, S
         .filter(|character| character.is_ascii_alphanumeric() || *character == '-')
         .collect::<String>();
     let output = parent.join(format!("{project_name}-{language_suffix}"));
-    export_path(&project_path, &input.items, &output)
+    export_path(
+        &project_path,
+        &input.items,
+        &output,
+        &input.target_language.code,
+    )
 }
 
 fn export_path(
     project_path: &Path,
     items: &[TranslationItem],
     output_path: &Path,
+    target_language: &str,
 ) -> Result<ExportResult, String> {
-    let project = detect_project(project_path).map_err(|error| error.to_string())?;
+    let project = detect_game(project_path).map_err(|error| error.to_string())?;
     let plan = PatchPlan::capture(project).map_err(|error| error.to_string())?;
     let translations = items
         .iter()
@@ -276,7 +279,7 @@ fn export_path(
         })
         .collect::<Vec<_>>();
     let manifest = plan
-        .export(&translations, &findings, output_path)
+        .export_for_language(&translations, &findings, output_path, target_language)
         .map_err(|error| error.to_string())?;
     Ok(ExportResult {
         output_path: output_path.to_string_lossy().into_owned(),
@@ -388,11 +391,53 @@ mod tests {
         )
         .unwrap();
 
-        let result = super::export_path(&fixture, &translated.items, &output).unwrap();
+        let result = super::export_path(&fixture, &translated.items, &output, "zh-CN").unwrap();
 
         assert!(output.join("patch-manifest.json").is_file());
         assert!(output.join("data/Map001.json").is_file());
         assert!(result.file_count > 0);
+        let _ = std::fs::remove_dir_all(output);
+    }
+
+    #[test]
+    #[ignore = "requires an external Ren'Py distribution"]
+    fn scans_an_external_renpy_distribution() {
+        let root = std::env::var_os("GAME_TRANSLATOR_RENPY_FIXTURE")
+            .map(PathBuf::from)
+            .expect("set GAME_TRANSLATOR_RENPY_FIXTURE");
+
+        let result = super::scan_path(&root).unwrap();
+
+        assert_eq!(result.engine, "Ren'Py");
+        assert!(result.segment_count > 100);
+    }
+
+    #[test]
+    #[ignore = "requires an external Ren'Py distribution"]
+    fn exports_an_external_renpy_distribution() {
+        let root = std::env::var_os("GAME_TRANSLATOR_RENPY_FIXTURE")
+            .map(PathBuf::from)
+            .expect("set GAME_TRANSLATOR_RENPY_FIXTURE");
+        let translated = super::translate_path_with_provider(
+            &root,
+            &FakeProvider,
+            "test-model",
+            "Auto-detect the source language",
+            "English (en-US)",
+        )
+        .unwrap();
+        let output = std::env::temp_dir().join(format!(
+            "game-translator-renpy-export-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&output);
+
+        let result = super::export_path(&root, &translated.items, &output, "en-US").unwrap();
+
+        assert!(result.file_count > 0);
+        assert!(output.join("game/tl/en-US/script.rpy").is_file());
+        let rendered = std::fs::read_to_string(output.join("game/tl/en-US/script.rpy")).unwrap();
+        assert!(rendered.contains("译："));
         let _ = std::fs::remove_dir_all(output);
     }
 }
