@@ -24,7 +24,10 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   const [view, setView] = useState<View>("overview");
   const [providerOpen, setProviderOpen] = useState(false);
-  const [provider, setProvider] = useState<ProviderConfiguration | null>(null);
+  const [provider, setProvider] = useState<ProviderConfiguration | null>(() => {
+    const stored = localStorage.getItem("game-translator-provider");
+    return stored ? JSON.parse(stored) as ProviderConfiguration : null;
+  });
   const [sourceLanguage, setSourceLanguage] = useState<Language>({ code: "auto", name: "自动检测" });
   const [targetLanguage, setTargetLanguage] = useState<Language>({ code: "zh-CN", name: "简体中文" });
   const [translation, setTranslation] = useState<TranslationRun | null>(null);
@@ -36,11 +39,24 @@ export default function App() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
+  const saveProvider = (configuration: ProviderConfiguration) => {
+    void invoke("save_provider_configuration", { provider: configuration })
+      .then(() => {
+        const persisted = { ...configuration, apiKey: undefined };
+        localStorage.setItem("game-translator-provider", JSON.stringify(persisted));
+        setProvider(persisted);
+        setProviderOpen(false);
+      })
+      .catch((error: unknown) => setTranslationError(String(error)));
+  };
+
   if (!project) {
-    return (
+    return <>
       <ProjectHome
         error={openError}
         scanning={scanning}
+        providerName={provider?.model ?? null}
+        onConfigure={() => setProviderOpen(true)}
         onSelect={() => {
           setOpenError(null);
           setScanning(true);
@@ -57,7 +73,8 @@ export default function App() {
           demo: true,
         })}
       />
-    );
+      <ProviderDrawer open={providerOpen} current={provider} onClose={() => setProviderOpen(false)} onSave={saveProvider} />
+    </>;
   }
 
   const startTranslation = () => {
@@ -216,14 +233,7 @@ export default function App() {
         open={providerOpen}
         current={provider}
         onClose={() => setProviderOpen(false)}
-        onSave={(configuration) => {
-          void invoke("save_provider_configuration", { provider: configuration })
-            .then(() => {
-              setProvider(configuration);
-              setProviderOpen(false);
-            })
-            .catch((error: unknown) => setTranslationError(String(error)));
-        }}
+        onSave={saveProvider}
       />
     </div>
   );

@@ -7,6 +7,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() => undefined) }));
 
 beforeEach(() => {
+  localStorage.clear();
   vi.mocked(invoke).mockReset();
   vi.mocked(invoke).mockResolvedValue(undefined);
 });
@@ -17,6 +18,14 @@ function openDemoProject() {
 }
 
 describe("project flow", () => {
+  it("configures the model from the startup screen", () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "主界面配置模型" }));
+
+    expect(screen.getByRole("dialog", { name: "模型接入" })).toBeVisible();
+  });
+
   it("opens and scans a real project through Tauri", async () => {
     vi.mocked(invoke).mockResolvedValue({
       projectPath: "D:\\Games\\RealGame",

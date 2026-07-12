@@ -36,9 +36,8 @@ export function ProviderDrawer({
         {kind === "openai" ? <label>API Key<input aria-label="API Key" value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" placeholder="sk-••••••••" /></label> : null}
         <label>模型名称<input value={model} onChange={(event) => setModel(event.target.value)} placeholder="例如 deepseek-chat" /></label>
         <div className="drawer-note"><b>密钥只保存在系统凭据库</b><span>不会写入项目文件或上传到我们的服务器。</span></div>
-        <footer><button className="ghost-action" onClick={onClose}>取消</button><button className="primary-action" onClick={() => onSave({ kind, baseUrl, model, apiKey: kind === "openai" ? apiKey : undefined })}>保存配置</button></footer>
+        <footer><button className="ghost-action" onClick={onClose}>取消</button><button className="primary-action" onClick={() => onSave({ kind, baseUrl, model, apiKey: kind === "openai" && apiKey ? apiKey : undefined })}>保存配置</button></footer>
       </section>
     </div>
   );
 }
-

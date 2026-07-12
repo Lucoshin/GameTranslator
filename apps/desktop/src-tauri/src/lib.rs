@@ -134,13 +134,18 @@ fn save_provider_configuration(provider: ProviderInput) -> Result<(), String> {
         model: _,
     } = provider;
     if kind == "openai" {
-        let secret = api_key
-            .as_deref()
-            .ok_or_else(|| "OpenAI-compatible Provider 需要 API Key".to_owned())?;
         let mut credentials = WindowsCredentialStore::new("GameTranslator");
-        credentials
-            .set("default-provider", secret)
-            .map_err(|error| error.to_string())?;
+        if let Some(secret) = api_key.as_deref().filter(|secret| !secret.is_empty()) {
+            credentials
+                .set("default-provider", secret)
+                .map_err(|error| error.to_string())?;
+        } else if credentials
+            .get("default-provider")
+            .map_err(|error| error.to_string())?
+            .is_none()
+        {
+            return Err("OpenAI-compatible Provider 需要 API Key".to_owned());
+        }
     }
     Ok(())
 }

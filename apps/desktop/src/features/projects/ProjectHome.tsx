@@ -1,4 +1,4 @@
-export function ProjectHome({ onSelect, onOpenDemo, error, scanning }: { onSelect: () => void; onOpenDemo: () => void; error: string | null; scanning: boolean }) {
+export function ProjectHome({ onSelect, onOpenDemo, onConfigure, providerName, error, scanning }: { onSelect: () => void; onOpenDemo: () => void; onConfigure: () => void; providerName: string | null; error: string | null; scanning: boolean }) {
   return (
     <main className="home-screen">
       <div className="paper-grain" />
@@ -7,7 +7,7 @@ export function ProjectHome({ onSelect, onOpenDemo, error, scanning }: { onSelec
           <span className="seal">译</span>
           <span>GameTranslator</span>
         </a>
-        <span className="version">OPEN SOURCE · v0.1 PREVIEW</span>
+        <div className="home-settings"><span className={providerName ? "model-chip" : "model-chip inactive"}><i />{providerName ?? "模型未配置"}</span><button className="text-button" aria-label="主界面配置模型" onClick={onConfigure}>配置模型</button><span className="version">OPEN SOURCE · v0.1 PREVIEW</span></div>
       </header>
 
       <section className="hero" id="top">

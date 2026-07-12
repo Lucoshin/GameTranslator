@@ -63,6 +63,8 @@ button { color: inherit; }
 .language-arrow { padding-bottom: 11px; color: var(--vermilion); font-weight: 800; }
 .custom-language { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
 .review-pagination { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding-top: 12px; color: var(--ink-soft); font-size: 10px; }
+.home-settings { display: flex; align-items: center; gap: 16px; }
+.model-chip.inactive { color: var(--ink-soft); }
 .progress-ring { background: conic-gradient(var(--vermillion) var(--progress), #4c5046 0); }
 .progress-ring.indeterminate { background: conic-gradient(var(--vermillion) 0 18%, #4c5046 18% 100%); animation: ring-spin 1.1s linear infinite; }
 .progress-ring.indeterminate strong { animation: ring-counter-spin 1.1s linear infinite; }
