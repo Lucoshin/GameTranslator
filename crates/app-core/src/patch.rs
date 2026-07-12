@@ -4,19 +4,19 @@ use std::{
 
 use game_translator_engine_core::{DetectedProject, EngineKind};
 use game_translator_qa_core::{QaFinding, QaSeverity};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 const HEX: &[u8; 16] = b"0123456789abcdef";
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PatchFile {
     pub relative_path: PathBuf,
     pub source_sha256: String,
     pub target_sha256: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct PatchManifest {
     pub format_version: u32,
     pub files: Vec<PatchFile>,

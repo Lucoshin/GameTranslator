@@ -70,6 +70,10 @@ describe("project flow", () => {
       .mockResolvedValueOnce({
         outputPath: "D:\\Exports\\RealGame-zhCN",
         fileCount: 1,
+      })
+      .mockResolvedValueOnce({
+        installedPath: "D:\\Games\\RealGame\\game\\tl\\en_US",
+        fileCount: 2,
       });
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "选择游戏目录" }));
@@ -84,7 +88,7 @@ describe("project flow", () => {
     fireEvent.change(screen.getByLabelText("源语言"), { target: { value: "ja-JP" } });
     fireEvent.change(screen.getByLabelText("目标语言"), { target: { value: "en-US" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "开始汉化" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始翻译" }));
 
     expect(await screen.findByRole("heading", { name: "翻译任务" })).toBeVisible();
     expect(screen.getByText("1 / 1")).toBeVisible();
@@ -104,7 +108,7 @@ describe("project flow", () => {
       target: { value: "总算到了。 \\V[1]" },
     });
     fireEvent.click(screen.getByRole("button", { name: "导出补丁" }));
-    fireEvent.click(screen.getByRole("button", { name: "生成汉化补丁" }));
+    fireEvent.click(screen.getByRole("button", { name: "生成翻译补丁" }));
 
     expect(await screen.findByText("D:\\Exports\\RealGame-zhCN")).toBeVisible();
     expect(invoke).toHaveBeenNthCalledWith(4, "export_translation_patch", expect.any(Object));
@@ -114,6 +118,9 @@ describe("project flow", () => {
         items: [{ target: "总算到了。 \\V[1]" }],
       },
     });
+    fireEvent.click(screen.getByRole("button", { name: "安装到当前游戏" }));
+    expect(await screen.findByText("翻译已安装，重新启动游戏后生效")).toBeVisible();
+    expect(invoke).toHaveBeenNthCalledWith(5, "install_translation_patch", expect.any(Object));
   });
 
   it("starts the backend even when event listener registration stalls", async () => {
@@ -139,7 +146,7 @@ describe("project flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "选择游戏目录" }));
     await screen.findByRole("heading", { name: "RealGame" });
 
-    fireEvent.click(screen.getByRole("button", { name: "开始汉化" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始翻译" }));
 
     await waitFor(() => expect(invoke).toHaveBeenCalledWith("translate_project", expect.any(Object)));
   });
@@ -167,7 +174,7 @@ describe("project flow", () => {
 
   it("moves between translation review and export views", () => {
     openDemoProject();
-    fireEvent.click(screen.getByRole("button", { name: "开始汉化" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始翻译" }));
     expect(screen.getByRole("heading", { name: "翻译任务" })).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "校对文本" }));

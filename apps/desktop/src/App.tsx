@@ -17,6 +17,7 @@ export type TranslationProgressState = { phase: "idle" | "extracting" | "transla
 export type TranslationLog = { time: string; message: string };
 type TranslationProgressEvent = TranslationProgressState & { runId: string };
 type ExportResult = { outputPath: string; fileCount: number };
+type InstallResult = { installedPath: string; fileCount: number };
 
 export default function App() {
   const [project, setProject] = useState<ProjectSummary | null>(null);
@@ -39,6 +40,9 @@ export default function App() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
+  const [installResult, setInstallResult] = useState<InstallResult | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
+  const [installing, setInstalling] = useState(false);
   const saveProvider = (configuration: ProviderConfiguration) => {
     void invoke("save_provider_configuration", { provider: configuration })
       .then(() => {
@@ -166,6 +170,8 @@ export default function App() {
     })
       .then(setExportResult)
       .catch((error: unknown) => setExportError(String(error)))
+    setInstallResult(null);
+    setInstallError(null);
       .finally(() => setExporting(false));
   };
 
@@ -175,6 +181,22 @@ export default function App() {
         <button className="brand-mark" onClick={() => setView("overview")} aria-label="返回项目概览">
           <span>译</span>
         </button>
+  const installPatch = () => {
+    if (!exportResult || project.demo) return;
+    setInstalling(true);
+    setInstallError(null);
+    void invoke<InstallResult>("install_translation_patch", {
+      input: {
+        projectPath: project.projectPath,
+        patchPath: exportResult.outputPath,
+        targetLanguage,
+      },
+    })
+      .then(setInstallResult)
+      .catch((error: unknown) => setInstallError(String(error)))
+      .finally(() => setInstalling(false));
+  };
+
         <nav aria-label="项目导航">
           <RailButton label="概览" active={view === "overview"} onClick={() => setView("overview")} glyph="本" />
           <RailButton label="任务" active={view === "translation"} onClick={() => setView("translation")} glyph="进" />
@@ -244,9 +266,13 @@ export default function App() {
             />
           ) : null}
         </main>
+              installing={installing}
       </div>
 
+              onInstall={installPatch}
       <ProviderDrawer
+              installResult={installResult}
+              installError={installError}
         open={providerOpen}
         current={provider}
         onClose={() => setProviderOpen(false)}

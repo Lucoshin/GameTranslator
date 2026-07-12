@@ -6,7 +6,7 @@ mod write;
 pub use detect::detect_project;
 pub use generate::generate_templates;
 pub use template::{extract_project, extract_templates};
-pub use write::write_translations;
+pub use write::{language_identifier, write_translations};
 
 pub struct RenPyAdapter;
 

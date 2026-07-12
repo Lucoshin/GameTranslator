@@ -1,9 +1,10 @@
 use std::{collections::HashMap, path::Path, path::PathBuf, time::Instant};
 
 use game_translator_app_core::{
-    detect_game, engine_name, extract_game, CredentialStore, PatchPlan, WindowsCredentialStore,
+    detect_game, engine_name, extract_game, CredentialStore, PatchManifest, PatchPlan,
+    WindowsCredentialStore,
 };
-use game_translator_engine_core::Segment;
+use game_translator_engine_core::{EngineKind, Segment};
 use game_translator_project_store::{CacheEntry, ProjectStore};
 use game_translator_provider_core::{
     OllamaProvider, OpenAiCompatibleProvider, TranslationProvider,
@@ -123,6 +124,21 @@ struct ExportCommandInput {
 #[serde(rename_all = "camelCase")]
 struct ExportResult {
     output_path: String,
+    file_count: usize,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct InstallCommandInput {
+    project_path: String,
+    patch_path: String,
+    target_language: LanguageInput,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InstallResult {
+    installed_path: String,
     file_count: usize,
 }
 
@@ -659,7 +675,7 @@ fn load_cached_translations(
 #[tauri::command]
 fn export_translation_patch(input: ExportCommandInput) -> Result<ExportResult, String> {
     let parent = rfd::FileDialog::new()
-        .set_title("选择汉化补丁导出位置")
+        .set_title("选择翻译补丁导出位置")
         .pick_folder()
         .ok_or_else(|| "未选择导出位置".to_owned())?;
     let project_path = PathBuf::from(input.project_path);
@@ -716,6 +732,95 @@ fn export_path(
     })
 }
 
+#[tauri::command]
+fn install_translation_patch(input: InstallCommandInput) -> Result<InstallResult, String> {
+    let InstallCommandInput {
+        project_path,
+        patch_path,
+        target_language,
+    } = input;
+    install_patch_path(
+        Path::new(&project_path),
+        Path::new(&patch_path),
+        &target_language.code,
+    )
+}
+
+fn install_patch_path(
+    project_path: &Path,
+    patch_path: &Path,
+    target_language: &str,
+) -> Result<InstallResult, String> {
+    let project = detect_game(project_path).map_err(|error| error.to_string())?;
+    if project.engine != EngineKind::RenPy {
+        return Err("当前自动安装仅支持 Ren'Py；其他引擎请使用导出的独立补丁目录".into());
+    }
+    let manifest_path = patch_path.join("patch-manifest.json");
+    let manifest: PatchManifest = serde_json::from_slice(
+        &std::fs::read(&manifest_path).map_err(|error| format!("读取补丁清单失败: {error}"))?,
+    )
+    .map_err(|error| format!("补丁清单无效: {error}"))?;
+    if manifest.format_version != 1 {
+        return Err(format!("不支持的补丁格式版本: {}", manifest.format_version));
+    }
+    for file in &manifest.files {
+        validate_patch_relative_path(&file.relative_path)?;
+        let source = patch_path.join(&file.relative_path);
+        let actual_hash = file_sha256(&source)?;
+        if actual_hash != file.target_sha256 {
+            return Err(format!(
+                "补丁文件校验失败: {}",
+                file.relative_path.display()
+            ));
+        }
+    }
+    let backup_root = patch_path.join("backup");
+    for file in &manifest.files {
+        let source = patch_path.join(&file.relative_path);
+        let destination = project_path.join(&file.relative_path);
+        if destination.exists() {
+            let backup = backup_root.join(&file.relative_path);
+            if let Some(parent) = backup.parent() {
+                std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+            }
+            std::fs::copy(&destination, backup).map_err(|error| error.to_string())?;
+        }
+        if let Some(parent) = destination.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+        }
+        std::fs::copy(source, destination).map_err(|error| error.to_string())?;
+    }
+    let language = game_translator_engine_renpy::language_identifier(target_language);
+    Ok(InstallResult {
+        installed_path: project_path
+            .join("game/tl")
+            .join(language)
+            .to_string_lossy()
+            .into_owned(),
+        file_count: manifest.files.len(),
+    })
+}
+
+fn validate_patch_relative_path(path: &Path) -> Result<(), String> {
+    if path.is_absolute()
+        || path.components().any(|component| {
+            !matches!(
+                component,
+                std::path::Component::Normal(_) | std::path::Component::CurDir
+            )
+        })
+    {
+        return Err(format!("补丁包含不安全路径: {}", path.display()));
+    }
+    Ok(())
+}
+
+fn file_sha256(path: &Path) -> Result<String, String> {
+    let bytes =
+        std::fs::read(path).map_err(|error| format!("读取 {} 失败: {error}", path.display()))?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// Starts the desktop application event loop.
 ///
@@ -728,7 +833,8 @@ pub fn run() {
             select_and_scan_project,
             save_provider_configuration,
             translate_project,
-            export_translation_patch
+            export_translation_patch,
+            install_translation_patch
         ])
         .run(tauri::generate_context!())
         .expect("failed to run GameTranslator");
@@ -973,6 +1079,47 @@ mod tests {
     }
 
     #[test]
+    fn installs_a_verified_renpy_patch_into_the_game() {
+        use sha2::{Digest, Sha256};
+
+        let root = std::env::temp_dir().join(format!(
+            "game-translator-install-project-{}",
+            std::process::id()
+        ));
+        let patch = std::env::temp_dir().join(format!(
+            "game-translator-install-patch-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&patch);
+        std::fs::create_dir_all(root.join("renpy")).unwrap();
+        std::fs::create_dir_all(root.join("game")).unwrap();
+        std::fs::write(root.join("Mayfly.py"), "").unwrap();
+        let relative = PathBuf::from("game/tl/ja_JP/script.rpy");
+        std::fs::create_dir_all(patch.join(relative.parent().unwrap())).unwrap();
+        let content = "translate ja_JP start:\n    \"こんにちは\"\n";
+        std::fs::write(patch.join(&relative), content).unwrap();
+        let hash = format!("{:x}", Sha256::digest(content.as_bytes()));
+        std::fs::write(
+            patch.join("patch-manifest.json"),
+            format!(
+                r#"{{"format_version":1,"files":[{{"relative_path":"game/tl/ja_JP/script.rpy","source_sha256":"","target_sha256":"{hash}"}}]}}"#
+            ),
+        )
+        .unwrap();
+
+        let result = super::install_patch_path(&root, &patch, "ja-JP").unwrap();
+
+        assert_eq!(result.file_count, 1);
+        assert_eq!(
+            std::fs::read_to_string(root.join(&relative)).unwrap(),
+            content
+        );
+        let _ = std::fs::remove_dir_all(root);
+        let _ = std::fs::remove_dir_all(patch);
+    }
+
+    #[test]
     #[ignore = "requires an external Ren'Py distribution"]
     fn scans_an_external_renpy_distribution() {
         let root = std::env::var_os("GAME_TRANSLATOR_RENPY_FIXTURE")
@@ -1008,8 +1155,9 @@ mod tests {
         let result = super::export_path(&root, &translated.items, &output, "en-US").unwrap();
 
         assert!(result.file_count > 0);
-        assert!(output.join("game/tl/en-US/script.rpy").is_file());
-        let rendered = std::fs::read_to_string(output.join("game/tl/en-US/script.rpy")).unwrap();
+        assert!(output.join("game/tl/en_US/script.rpy").is_file());
+        assert!(output.join("game/game_translator_language.rpy").is_file());
+        let rendered = std::fs::read_to_string(output.join("game/tl/en_US/script.rpy")).unwrap();
         assert!(rendered.contains("译："));
         let _ = std::fs::remove_dir_all(output);
     }

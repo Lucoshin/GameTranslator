@@ -10,7 +10,7 @@ export function ProjectOverview({ project, configured, onConfigure, onStart }: {
           <h1>{project.projectName}</h1>
           <p className="muted">{project.projectPath} · <b>{project.engine}</b></p>
         </div>
-        <div className="stamp-status">可汉化</div>
+        <div className="stamp-status">可翻译</div>
       </section>
 
       <section className="stat-grid">
@@ -30,7 +30,7 @@ export function ProjectOverview({ project, configured, onConfigure, onStart }: {
           <div className="check-row ok"><span>✓</span><div><b>源文件只读</b><small>将在独立工作目录处理</small></div></div>
           <div className={configured ? "check-row ok" : "check-row"}><span>{configured ? "✓" : "!"}</span><div><b>{configured ? "模型已配置" : "模型尚未配置"}</b><small>支持 OpenAI-compatible / Ollama</small></div></div>
           <button className="secondary-action" onClick={onConfigure}>配置模型</button>
-          <button className="primary-action full" aria-label="开始汉化" onClick={onStart}>开始翻译 <span>→</span></button>
+          <button className="primary-action full" aria-label="开始翻译" onClick={onStart}>开始翻译 <span>→</span></button>
         </section>
       </div>
     </div>
