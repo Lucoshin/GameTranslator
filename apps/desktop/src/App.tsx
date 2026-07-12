@@ -95,11 +95,26 @@ export default function App() {
     setProgress(initial);
     setTranslationLogs([{ time: currentTime(), message: initial.message }]);
     void (async () => {
-      const unlisten = await listen<TranslationProgressEvent>("translation-progress", ({ payload }) => {
+      let active = true;
+      let receivedBackendEvent = false;
+      let unlisten: (() => void) | undefined;
+      void listen<TranslationProgressEvent>("translation-progress", ({ payload }) => {
         if (payload.runId !== runId) return;
+        receivedBackendEvent = true;
         setProgress(payload);
         setTranslationLogs((current) => [...current.slice(-99), { time: currentTime(), message: payload.message }]);
+      }).then((cleanup) => {
+        if (active) unlisten = cleanup;
+        else cleanup();
+      }).catch((error: unknown) => {
+        setTranslationLogs((current) => [...current, { time: currentTime(), message: `进度监听不可用：${String(error)}` }]);
       });
+      const startupWatchdog = window.setTimeout(() => {
+        if (receivedBackendEvent) return;
+        const message = "后端启动超过 15 秒，任务仍在尝试运行";
+        setProgress((current) => ({ ...(current ?? initial), message }));
+        setTranslationLogs((current) => [...current, { time: currentTime(), message }]);
+      }, 15_000);
       try {
         const result = await invoke<TranslationRun>("translate_project", {
           input: {
@@ -130,7 +145,9 @@ export default function App() {
         setProgress((current) => ({ ...(current ?? initial), phase: "failed", message }));
         setTranslationLogs((current) => [...current, { time: currentTime(), message: `任务失败：${message}` }]);
       } finally {
-        unlisten();
+        active = false;
+        window.clearTimeout(startupWatchdog);
+        unlisten?.();
         setTranslating(false);
       }
     })();

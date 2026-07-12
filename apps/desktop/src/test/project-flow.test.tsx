@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 
@@ -10,6 +11,7 @@ beforeEach(() => {
   localStorage.clear();
   vi.mocked(invoke).mockReset();
   vi.mocked(invoke).mockResolvedValue(undefined);
+  vi.mocked(listen).mockResolvedValue(() => undefined);
 });
 
 function openDemoProject() {
@@ -112,6 +114,34 @@ describe("project flow", () => {
         items: [{ target: "总算到了。 \\V[1]" }],
       },
     });
+  });
+
+  it("starts the backend even when event listener registration stalls", async () => {
+    localStorage.setItem("game-translator-provider", JSON.stringify({
+      kind: "openai",
+      baseUrl: "https://api.deepseek.com",
+      model: "deepseek-v4-flash",
+      performance: "fast",
+    }));
+    vi.mocked(listen).mockReturnValue(new Promise(() => undefined));
+    vi.mocked(invoke).mockImplementation((command) => {
+      if (command === "select_and_scan_project") {
+        return Promise.resolve({
+          projectPath: "D:\\Games\\RealGame",
+          projectName: "RealGame",
+          engine: "Ren'Py",
+          segmentCount: 10,
+        });
+      }
+      return new Promise(() => undefined);
+    });
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "选择游戏目录" }));
+    await screen.findByRole("heading", { name: "RealGame" });
+
+    fireEvent.click(screen.getByRole("button", { name: "开始汉化" }));
+
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("translate_project", expect.any(Object)));
   });
 
   it("opens a clearly labelled demo project", () => {
