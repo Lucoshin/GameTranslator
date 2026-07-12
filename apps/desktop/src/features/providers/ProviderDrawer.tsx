@@ -5,6 +5,7 @@ export type ProviderConfiguration = {
   baseUrl: string;
   model: string;
   apiKey?: string;
+  performance?: "stable" | "balanced" | "fast";
 };
 
 export function ProviderDrawer({
@@ -22,6 +23,7 @@ export function ProviderDrawer({
   const [baseUrl, setBaseUrl] = useState(current?.baseUrl ?? "https://api.example.com/v1");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(current?.model ?? "");
+  const [performance, setPerformance] = useState<"stable" | "balanced" | "fast">(current?.performance ?? "balanced");
   if (!open) return null;
 
   return (
@@ -35,8 +37,9 @@ export function ProviderDrawer({
         <label>Base URL<input aria-label="Base URL" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} /></label>
         {kind === "openai" ? <label>API Key<input aria-label="API Key" value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" placeholder="sk-••••••••" /></label> : null}
         <label>模型名称<input value={model} onChange={(event) => setModel(event.target.value)} placeholder="例如 deepseek-chat" /></label>
+        <label>性能模式<select aria-label="性能模式" value={performance} onChange={(event) => setPerformance(event.target.value as "stable" | "balanced" | "fast")}><option value="stable">稳定 · 低并发</option><option value="balanced">均衡 · 推荐</option><option value="fast">极速 · 高并发</option></select></label>
         <div className="drawer-note"><b>密钥只保存在系统凭据库</b><span>不会写入项目文件或上传到我们的服务器。</span></div>
-        <footer><button className="ghost-action" onClick={onClose}>取消</button><button className="primary-action" onClick={() => onSave({ kind, baseUrl, model, apiKey: kind === "openai" && apiKey ? apiKey : undefined })}>保存配置</button></footer>
+        <footer><button className="ghost-action" onClick={onClose}>取消</button><button className="primary-action" onClick={() => onSave({ kind, baseUrl, model, performance, apiKey: kind === "openai" && apiKey ? apiKey : undefined })}>保存配置</button></footer>
       </section>
     </div>
   );

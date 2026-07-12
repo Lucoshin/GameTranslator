@@ -42,3 +42,30 @@ fn replaces_a_cached_value_for_the_same_fingerprint() {
         Some("月光石")
     );
 }
+
+#[test]
+fn persists_cache_in_a_file_backed_store() {
+    let path = std::env::temp_dir().join(format!(
+        "game-translator-cache-{}.sqlite3",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    ProjectStore::open(&path)
+        .unwrap()
+        .put_cache(&CacheEntry {
+            input_fingerprint: "persistent".into(),
+            translation: "译文".into(),
+        })
+        .unwrap();
+
+    let reopened = ProjectStore::open(&path).unwrap();
+
+    assert_eq!(
+        reopened
+            .cached_translation("persistent")
+            .unwrap()
+            .as_deref(),
+        Some("译文")
+    );
+    let _ = std::fs::remove_file(path);
+}

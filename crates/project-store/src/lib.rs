@@ -4,7 +4,7 @@ mod migrations;
 mod projects;
 mod segments;
 
-use std::{error::Error, fmt};
+use std::{error::Error, fmt, path::Path};
 
 use rusqlite::Connection;
 
@@ -35,6 +35,19 @@ pub struct ProjectStore {
 }
 
 impl ProjectStore {
+    /// Opens or creates a persistent `SQLite` store and applies migrations.
+    ///
+    /// # Errors
+    /// Returns [`StoreError`] when the directory, database, or schema cannot be initialized.
+    pub fn open(path: &Path) -> Result<Self, StoreError> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| StoreError(error.to_string()))?;
+        }
+        let connection = Connection::open(path)?;
+        migrations::migrate(&connection)?;
+        Ok(Self { connection })
+    }
+
     /// Creates an isolated in-memory store and applies all migrations.
     ///
     /// # Errors

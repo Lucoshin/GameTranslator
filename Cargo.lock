@@ -1260,11 +1260,13 @@ version = "0.1.0"
 dependencies = [
  "game-translator-app-core",
  "game-translator-engine-core",
+ "game-translator-project-store",
  "game-translator-provider-core",
  "game-translator-qa-core",
  "game-translator-translation-core",
  "rfd",
  "serde",
+ "sha2",
  "tauri",
  "tauri-build",
 ]

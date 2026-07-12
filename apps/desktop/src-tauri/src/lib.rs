@@ -4,6 +4,7 @@ use game_translator_app_core::{
     detect_game, engine_name, extract_game, CredentialStore, PatchPlan, WindowsCredentialStore,
 };
 use game_translator_engine_core::Segment;
+use game_translator_project_store::{CacheEntry, ProjectStore};
 use game_translator_provider_core::{
     OllamaProvider, OpenAiCompatibleProvider, TranslationProvider,
 };
@@ -15,7 +16,8 @@ use game_translator_translation_core::{
     RunControl, RunResult, TranslationOrchestrator, TranslationSegment,
 };
 use serde::{Deserialize, Serialize};
-use tauri::Emitter;
+use sha2::{Digest, Sha256};
+use tauri::{Emitter, Manager};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,6 +35,8 @@ struct ProviderInput {
     base_url: String,
     model: String,
     api_key: Option<String>,
+    #[serde(default)]
+    performance: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,6 +60,17 @@ struct TranslationProgressEvent {
     warning_findings: usize,
     blocking_findings: usize,
     message: String,
+}
+
+struct TranslationExecution<'a> {
+    model: &'a str,
+    source_language: &'a str,
+    target_language: &'a str,
+    cache_scope: &'a str,
+    store: Option<&'a ProjectStore>,
+    batch_size: usize,
+    character_budget: usize,
+    concurrency: usize,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -132,6 +147,7 @@ fn save_provider_configuration(provider: ProviderInput) -> Result<(), String> {
         api_key,
         base_url: _,
         model: _,
+        performance: _,
     } = provider;
     if kind == "openai" {
         let mut credentials = WindowsCredentialStore::new("GameTranslator");
@@ -175,6 +191,7 @@ fn translate_command(
                 base_url,
                 model,
                 api_key: _,
+                performance,
             },
     } = input;
     emit_progress(
@@ -198,18 +215,46 @@ fn translate_command(
             .ok_or_else(|| "尚未保存 API Key".to_owned())?;
         Box::new(OpenAiCompatibleProvider::new(&base_url, api_key))
     };
+    let (batch_size, character_budget, concurrency) =
+        performance_settings(&kind, performance.as_deref().unwrap_or("balanced"));
+    let database_path = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| error.to_string())?
+        .join("translations.sqlite3");
+    let store = ProjectStore::open(&database_path).map_err(|error| error.to_string())?;
+    let source_prompt = language_prompt(&source_language);
+    let target_prompt = language_prompt(&target_language);
+    let cache_scope = format!("v2\0{kind}\0{base_url}");
     translate_path_with_provider_and_progress(
         Path::new(&project_path),
         provider.as_ref(),
-        &model,
-        &language_prompt(&source_language),
-        &language_prompt(&target_language),
+        &TranslationExecution {
+            model: &model,
+            source_language: &source_prompt,
+            target_language: &target_prompt,
+            cache_scope: &cache_scope,
+            store: Some(&store),
+            batch_size,
+            character_budget,
+            concurrency,
+        },
         |phase, completed, total, failed, warnings, blocking, message| {
             emit_progress(
                 app, &run_id, phase, completed, total, failed, warnings, blocking, message,
             );
         },
     )
+}
+
+fn performance_settings(kind: &str, mode: &str) -> (usize, usize, usize) {
+    match (kind, mode) {
+        ("ollama", "fast") => (48, 20_000, 2),
+        ("ollama", _) => (32, 16_000, 1),
+        (_, "stable") => (32, 16_000, 4),
+        (_, "fast") => (96, 32_000, 16),
+        _ => (64, 24_000, 8),
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -258,9 +303,16 @@ fn translate_path_with_provider(
     translate_path_with_provider_and_progress(
         path,
         provider,
-        model,
-        source_language,
-        target_language,
+        &TranslationExecution {
+            model,
+            source_language,
+            target_language,
+            cache_scope: "test",
+            store: None,
+            batch_size: 32,
+            character_budget: 24_000,
+            concurrency: 1,
+        },
         |_, _, _, _, _, _, _| {},
     )
 }
@@ -268,9 +320,7 @@ fn translate_path_with_provider(
 fn translate_path_with_provider_and_progress<F>(
     path: &Path,
     provider: &dyn TranslationProvider,
-    model: &str,
-    source_language: &str,
-    target_language: &str,
+    execution: &TranslationExecution<'_>,
     mut progress: F,
 ) -> Result<TranslationRunResult, String>
 where
@@ -289,6 +339,18 @@ where
         "文本提取完成，正在请求模型",
     );
     let mut protected = HashMap::new();
+    let (fingerprints, cached) = load_cached_translations(&segments, execution);
+    if !cached.is_empty() {
+        progress(
+            "translating",
+            cached.len(),
+            total,
+            0,
+            0,
+            0,
+            &format!("命中 {} 条翻译缓存", cached.len()),
+        );
+    }
     let translation_segments = segments
         .iter()
         .map(|segment| {
@@ -298,11 +360,18 @@ where
             TranslationSegment::new(&segment.id, segment.source_file.to_string_lossy(), source)
         })
         .collect::<Vec<_>>();
-    let orchestrator =
-        TranslationOrchestrator::new(provider, model, source_language, target_language, 32);
+    let orchestrator = TranslationOrchestrator::new(
+        provider,
+        execution.model,
+        execution.source_language,
+        execution.target_language,
+        execution.batch_size,
+    )
+    .with_batch_character_budget(execution.character_budget)
+    .with_concurrency(execution.concurrency);
     let run = orchestrator.run_with_progress(
         &translation_segments,
-        &HashMap::new(),
+        &cached,
         RunControl::Running,
         |current| {
             let completed = current.translations.len() + current.failed_segment_ids.len();
@@ -326,8 +395,15 @@ where
         0,
         "模型翻译结束，正在执行质量检查",
     );
-    let (items, warning_findings, blocking_findings) =
-        restore_and_check(segments, &run, &protected, &mut progress)?;
+    let (items, warning_findings, blocking_findings) = restore_and_check(
+        segments,
+        &run,
+        &protected,
+        &cached,
+        &fingerprints,
+        execution.store,
+        &mut progress,
+    )?;
 
     progress(
         "completed",
@@ -351,6 +427,9 @@ fn restore_and_check<F>(
     segments: Vec<Segment>,
     run: &RunResult,
     protected: &HashMap<String, ProtectedText>,
+    cached: &HashMap<String, String>,
+    fingerprints: &HashMap<String, String>,
+    store: Option<&ProjectStore>,
     progress: &mut F,
 ) -> Result<(Vec<TranslationItem>, usize, usize), String>
 where
@@ -387,6 +466,16 @@ where
                 }
             }
         }
+        if item_qa != "blocking" && !cached.contains_key(&segment.id) {
+            if let (Some(store), Some(fingerprint)) = (store, fingerprints.get(&segment.id)) {
+                store
+                    .put_cache(&CacheEntry {
+                        input_fingerprint: fingerprint.clone(),
+                        translation: translated.clone(),
+                    })
+                    .map_err(|error| error.to_string())?;
+            }
+        }
         items.push(TranslationItem {
             id: segment.id,
             source: segment.source,
@@ -410,6 +499,54 @@ where
     }
 
     Ok((items, warning_findings, blocking_findings))
+}
+
+fn translation_fingerprint(segment: &Segment, execution: &TranslationExecution<'_>) -> String {
+    let mut digest = Sha256::new();
+    for value in [
+        "game-translator-prompt-v2",
+        execution.cache_scope,
+        execution.model,
+        execution.source_language,
+        execution.target_language,
+        &segment.id,
+        &segment.source,
+        segment.context.speaker.as_deref().unwrap_or(""),
+        segment.context.previous_text.as_deref().unwrap_or(""),
+        segment.context.next_text.as_deref().unwrap_or(""),
+    ] {
+        digest.update(value.as_bytes());
+        digest.update([0]);
+    }
+    format!("{:x}", digest.finalize())
+}
+
+fn load_cached_translations(
+    segments: &[Segment],
+    execution: &TranslationExecution<'_>,
+) -> (HashMap<String, String>, HashMap<String, String>) {
+    let fingerprints = segments
+        .iter()
+        .map(|segment| {
+            (
+                segment.id.clone(),
+                translation_fingerprint(segment, execution),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    let cached = execution.store.map_or_else(HashMap::new, |store| {
+        fingerprints
+            .iter()
+            .filter_map(|(id, fingerprint)| {
+                store
+                    .cached_translation(fingerprint)
+                    .ok()
+                    .flatten()
+                    .map(|translation| (id.clone(), translation))
+            })
+            .collect()
+    });
+    (fingerprints, cached)
 }
 
 #[tauri::command]
@@ -493,6 +630,7 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     #[test]
     fn desktop_uses_the_core_product_name() {
@@ -534,6 +672,21 @@ mod tests {
         }
     }
 
+    struct CountingProvider(AtomicUsize);
+
+    impl game_translator_provider_core::TranslationProvider for CountingProvider {
+        fn translate(
+            &self,
+            request: &game_translator_provider_core::TranslationRequest,
+        ) -> Result<
+            game_translator_provider_core::TranslationResponse,
+            game_translator_provider_core::ProviderError,
+        > {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            FakeProvider.translate(request)
+        }
+    }
+
     #[test]
     fn translates_a_real_fixture_and_restores_control_codes() {
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -556,6 +709,51 @@ mod tests {
             .unwrap();
         assert_eq!(dialogue.target, "译：やっと着いた。 \\V[1]");
         assert_eq!(result.blocking_findings, 0);
+    }
+
+    #[test]
+    fn reuses_persistent_translations_without_calling_the_provider_again() {
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../fixtures/rpgmaker-mz-dialogue");
+        let database = std::env::temp_dir().join(format!(
+            "game-translator-desktop-cache-{}.sqlite3",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&database);
+        let provider = CountingProvider(AtomicUsize::new(0));
+        {
+            let store = game_translator_project_store::ProjectStore::open(&database).unwrap();
+            let execution = super::TranslationExecution {
+                model: "test-model",
+                source_language: "auto",
+                target_language: "zh-CN",
+                cache_scope: "test-cache-v1",
+                store: Some(&store),
+                batch_size: 4,
+                character_budget: 10_000,
+                concurrency: 2,
+            };
+            super::translate_path_with_provider_and_progress(
+                &fixture,
+                &provider,
+                &execution,
+                |_, _, _, _, _, _, _| {},
+            )
+            .unwrap();
+            let first_run_calls = provider.0.load(Ordering::SeqCst);
+
+            super::translate_path_with_provider_and_progress(
+                &fixture,
+                &provider,
+                &execution,
+                |_, _, _, _, _, _, _| {},
+            )
+            .unwrap();
+
+            assert!(first_run_calls > 0);
+            assert_eq!(provider.0.load(Ordering::SeqCst), first_run_calls);
+        }
+        let _ = std::fs::remove_file(database);
     }
 
     #[test]

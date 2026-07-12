@@ -75,6 +75,7 @@ describe("project flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "配置模型" }));
     fireEvent.change(screen.getByLabelText("API Key"), { target: { value: "secret" } });
     fireEvent.change(screen.getByLabelText("模型名称"), { target: { value: "test-model" } });
+    fireEvent.change(screen.getByLabelText("性能模式"), { target: { value: "fast" } });
     fireEvent.click(screen.getByRole("button", { name: "保存配置" }));
     await screen.findByText("test-model");
 
@@ -86,6 +87,7 @@ describe("project flow", () => {
     expect(await screen.findByRole("heading", { name: "翻译任务" })).toBeVisible();
     expect(screen.getByText("1 / 1")).toBeVisible();
     expect(invoke).toHaveBeenNthCalledWith(2, "save_provider_configuration", expect.any(Object));
+    expect(vi.mocked(invoke).mock.calls[1][1]).toMatchObject({ provider: { performance: "fast" } });
     expect(invoke).toHaveBeenNthCalledWith(3, "translate_project", expect.any(Object));
     expect(vi.mocked(invoke).mock.calls[2][1]).toMatchObject({
       input: {

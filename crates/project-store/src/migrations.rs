@@ -7,24 +7,24 @@ pub(crate) fn migrate(connection: &Connection) -> Result<(), StoreError> {
         "
         PRAGMA foreign_keys = ON;
 
-        CREATE TABLE projects (
+        CREATE TABLE IF NOT EXISTS projects (
             id TEXT PRIMARY KEY,
             root TEXT NOT NULL
         );
 
-        CREATE TABLE segments (
+        CREATE TABLE IF NOT EXISTS segments (
             id TEXT PRIMARY KEY,
             project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
             source TEXT NOT NULL,
             translation TEXT
         );
 
-        CREATE TABLE jobs (
+        CREATE TABLE IF NOT EXISTS jobs (
             id TEXT PRIMARY KEY,
             project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE
         );
 
-        CREATE TABLE batches (
+        CREATE TABLE IF NOT EXISTS batches (
             id TEXT NOT NULL,
             job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
             input_fingerprint TEXT NOT NULL,
@@ -32,19 +32,19 @@ pub(crate) fn migrate(connection: &Connection) -> Result<(), StoreError> {
             PRIMARY KEY (job_id, id)
         );
 
-        CREATE TABLE translation_cache (
+        CREATE TABLE IF NOT EXISTS translation_cache (
             input_fingerprint TEXT PRIMARY KEY,
             translation TEXT NOT NULL
         );
 
-        CREATE TABLE glossary (
+        CREATE TABLE IF NOT EXISTS glossary (
             project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
             source_term TEXT NOT NULL,
             target_term TEXT NOT NULL,
             PRIMARY KEY (project_id, source_term)
         );
 
-        CREATE TABLE translation_memory (
+        CREATE TABLE IF NOT EXISTS translation_memory (
             input_fingerprint TEXT PRIMARY KEY,
             source TEXT NOT NULL,
             target TEXT NOT NULL

@@ -39,6 +39,7 @@ impl TranslationProvider for OllamaProvider {
             .json(&OllamaRequest {
                 model: &request.model,
                 stream: false,
+                keep_alive: -1,
                 format: "json",
                 messages: [Message {
                     role: "user",
@@ -67,6 +68,7 @@ struct PromptPayload<'a> {
 struct OllamaRequest<'a> {
     model: &'a str,
     stream: bool,
+    keep_alive: i8,
     format: &'a str,
     messages: [Message<'a>; 1],
 }

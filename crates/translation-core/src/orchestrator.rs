@@ -1,10 +1,14 @@
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::{mpsc, Mutex},
+    thread,
+};
 
 use game_translator_provider_core::{
     TranslationInput, TranslationProvider, TranslationRequest, TranslationResponse,
 };
 
-use crate::{build_batches, retry::with_transient_retry, TranslationSegment};
+use crate::{build_batches_with_budget, retry::with_transient_retry, TranslationSegment};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RunControl {
@@ -32,6 +36,8 @@ pub struct TranslationOrchestrator<'a> {
     source_language: String,
     target_language: String,
     maximum_batch_size: usize,
+    maximum_batch_characters: usize,
+    maximum_concurrency: usize,
 }
 
 impl<'a> TranslationOrchestrator<'a> {
@@ -49,7 +55,21 @@ impl<'a> TranslationOrchestrator<'a> {
             source_language: source_language.into(),
             target_language: target_language.into(),
             maximum_batch_size: maximum_batch_size.max(1),
+            maximum_batch_characters: 24_000,
+            maximum_concurrency: 1,
         }
+    }
+
+    #[must_use]
+    pub fn with_concurrency(mut self, maximum_concurrency: usize) -> Self {
+        self.maximum_concurrency = maximum_concurrency.max(1);
+        self
+    }
+
+    #[must_use]
+    pub fn with_batch_character_budget(mut self, maximum_characters: usize) -> Self {
+        self.maximum_batch_characters = maximum_characters.max(1);
+        self
     }
 
     #[must_use]
@@ -88,43 +108,74 @@ impl<'a> TranslationOrchestrator<'a> {
             .filter(|segment| !cached.contains_key(&segment.id))
             .cloned()
             .collect::<Vec<_>>();
-        for batch in build_batches(&pending, self.maximum_batch_size) {
-            self.translate_with_split(&batch, &mut result, &mut on_progress);
-        }
+        let batches = build_batches_with_budget(
+            &pending,
+            self.maximum_batch_size,
+            self.maximum_batch_characters,
+        );
+        self.run_batches(batches, &mut result, &mut on_progress);
         if !result.failed_segment_ids.is_empty() {
             result.status = RunStatus::CompletedWithFailures;
         }
         result
     }
 
-    fn translate_with_split<F>(
+    fn run_batches<F>(
         &self,
-        batch: &[TranslationSegment],
+        batches: Vec<Vec<TranslationSegment>>,
         result: &mut RunResult,
         on_progress: &mut F,
     ) where
         F: FnMut(&RunResult),
     {
+        if batches.is_empty() {
+            return;
+        }
+        let worker_count = self.maximum_concurrency.min(batches.len());
+        let queue = Mutex::new(VecDeque::from(batches));
+        let (sender, receiver) = mpsc::channel();
+        thread::scope(|scope| {
+            for _ in 0..worker_count {
+                let sender = sender.clone();
+                let queue = &queue;
+                scope.spawn(move || loop {
+                    let batch = queue.lock().expect("batch queue poisoned").pop_front();
+                    let Some(batch) = batch else { break };
+                    let mut outcome = BatchOutcome::default();
+                    self.translate_with_split(&batch, &mut outcome);
+                    if sender.send(outcome).is_err() {
+                        break;
+                    }
+                });
+            }
+            drop(sender);
+            while let Ok(outcome) = receiver.recv() {
+                result.translations.extend(outcome.translations);
+                result.failed_segment_ids.extend(outcome.failed_segment_ids);
+                on_progress(result);
+            }
+        });
+    }
+
+    fn translate_with_split(&self, batch: &[TranslationSegment], outcome: &mut BatchOutcome) {
         match self.translate_batch(batch) {
             Ok(response) if response_matches(batch, &response) => {
-                result.translations.extend(
+                outcome.translations.extend(
                     response
                         .translations
                         .into_iter()
                         .map(|translation| (translation.id, translation.text)),
                 );
-                on_progress(result);
             }
             Ok(_) | Err(_) if batch.len() > 1 => {
                 let midpoint = batch.len() / 2;
-                self.translate_with_split(&batch[..midpoint], result, on_progress);
-                self.translate_with_split(&batch[midpoint..], result, on_progress);
+                self.translate_with_split(&batch[..midpoint], outcome);
+                self.translate_with_split(&batch[midpoint..], outcome);
             }
             Ok(_) | Err(_) => {
-                result
+                outcome
                     .failed_segment_ids
                     .extend(batch.iter().map(|segment| segment.id.clone()));
-                on_progress(result);
             }
         }
     }
@@ -139,14 +190,38 @@ impl<'a> TranslationOrchestrator<'a> {
             target_language: self.target_language.clone(),
             segments: batch
                 .iter()
-                .map(|segment| TranslationInput {
-                    id: segment.id.clone(),
+                .enumerate()
+                .map(|(index, segment)| TranslationInput {
+                    id: index.to_string(),
                     text: segment.source.clone(),
                 })
                 .collect(),
         };
-        with_transient_retry(|| self.provider.translate(&request))
+        let mut response = with_transient_retry(|| self.provider.translate(&request))?;
+        if response.translations.len() != batch.len()
+            || response
+                .translations
+                .iter()
+                .enumerate()
+                .any(|(index, translation)| translation.id != index.to_string())
+        {
+            return Err(
+                game_translator_provider_core::ProviderError::InvalidResponse(
+                    "batch-local translation ids are missing or out of order".into(),
+                ),
+            );
+        }
+        for (translation, segment) in response.translations.iter_mut().zip(batch) {
+            translation.id.clone_from(&segment.id);
+        }
+        Ok(response)
     }
+}
+
+#[derive(Default)]
+struct BatchOutcome {
+    translations: HashMap<String, String>,
+    failed_segment_ids: Vec<String>,
 }
 
 fn response_matches(batch: &[TranslationSegment], response: &TranslationResponse) -> bool {
