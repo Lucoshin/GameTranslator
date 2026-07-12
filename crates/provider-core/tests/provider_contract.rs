@@ -1,6 +1,7 @@
 use std::{
     io::{Read, Write},
     net::TcpListener,
+    sync::mpsc,
     thread,
 };
 
@@ -29,6 +30,27 @@ fn mock_server(status: u16, body: &'static str) -> String {
         .unwrap();
     });
     format!("http://{address}")
+}
+
+fn capturing_mock_server(body: &'static str) -> (String, mpsc::Receiver<String>) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut request = [0_u8; 16_384];
+        let length = stream.read(&mut request).unwrap();
+        sender
+            .send(String::from_utf8_lossy(&request[..length]).into_owned())
+            .unwrap();
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+        .unwrap();
+    });
+    (format!("http://{address}"), receiver)
 }
 
 fn request() -> TranslationRequest {
@@ -76,4 +98,28 @@ fn maps_http_429_to_rate_limited() {
         provider.translate(&request()).unwrap_err(),
         ProviderError::RateLimited
     );
+}
+
+#[test]
+fn deepseek_requests_use_a_stable_system_prefix_and_user_isolation() {
+    let content = r#"{\"translations\":[{\"id\":\"segment-1\",\"text\":\"月光石\"}]}"#;
+    let response = Box::leak(
+        format!(r#"{{"choices":[{{"message":{{"content":"{content}"}}}}]}}"#).into_boxed_str(),
+    );
+    let (url, captured) = capturing_mock_server(response);
+    let provider =
+        OpenAiCompatibleProvider::new(url, "key").with_user_id("game-translator-desktop");
+
+    provider.translate(&request()).unwrap();
+
+    let raw = captured.recv().unwrap();
+    let payload = raw.split("\r\n\r\n").nth(1).unwrap();
+    let json: serde_json::Value = serde_json::from_str(payload).unwrap();
+    assert_eq!(json["messages"][0]["role"], "system");
+    assert!(json["messages"][0]["content"]
+        .as_str()
+        .unwrap()
+        .contains("game localization translator"));
+    assert_eq!(json["messages"][1]["role"], "user");
+    assert_eq!(json["user_id"], "game-translator-desktop");
 }

@@ -9,7 +9,10 @@ pub struct OpenAiCompatibleProvider {
     base_url: String,
     api_key: String,
     client: reqwest::blocking::Client,
+    user_id: Option<String>,
 }
+
+const TRANSLATION_SYSTEM_PROMPT: &str = "You are a game localization translator. Translate every segment into the requested target language, preserve every <ph> tag exactly, and return only a JSON object with a translations array containing the original ids and translated text.";
 
 impl OpenAiCompatibleProvider {
     #[must_use]
@@ -17,8 +20,20 @@ impl OpenAiCompatibleProvider {
         Self {
             base_url: base_url.into().trim_end_matches('/').to_owned(),
             api_key: api_key.into(),
-            client: reqwest::blocking::Client::new(),
+            client: reqwest::blocking::Client::builder()
+                .pool_max_idle_per_host(128)
+                .pool_idle_timeout(std::time::Duration::from_secs(90))
+                .tcp_keepalive(std::time::Duration::from_secs(30))
+                .build()
+                .unwrap_or_else(|_| reqwest::blocking::Client::new()),
+            user_id: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_user_id(mut self, user_id: impl Into<String>) -> Self {
+        self.user_id = Some(user_id.into());
+        self
     }
 }
 
@@ -28,7 +43,6 @@ impl TranslationProvider for OpenAiCompatibleProvider {
         request: &TranslationRequest,
     ) -> Result<TranslationResponse, ProviderError> {
         let content = serde_json::to_string(&PromptPayload {
-            task: "Translate every segment into the target language. Preserve all <ph> tags exactly and return only the requested JSON object.",
             source_language: &request.source_language,
             target_language: &request.target_language,
             segments: &request.segments,
@@ -41,13 +55,20 @@ impl TranslationProvider for OpenAiCompatibleProvider {
             .bearer_auth(&self.api_key)
             .json(&OpenAiRequest {
                 model: &request.model,
-                messages: [Message {
-                    role: "user",
-                    content: &content,
-                }],
+                messages: [
+                    Message {
+                        role: "system",
+                        content: TRANSLATION_SYSTEM_PROMPT,
+                    },
+                    Message {
+                        role: "user",
+                        content: &content,
+                    },
+                ],
                 response_format: ResponseFormat {
                     kind: "json_object",
                 },
+                user_id: self.user_id.as_deref(),
             })
             .send()
             .map_err(|error| ProviderError::Transport(error.to_string()))?;
@@ -68,7 +89,6 @@ impl TranslationProvider for OpenAiCompatibleProvider {
 
 #[derive(Serialize)]
 struct PromptPayload<'a> {
-    task: &'a str,
     source_language: &'a str,
     target_language: &'a str,
     segments: &'a [crate::TranslationInput],
@@ -77,8 +97,10 @@ struct PromptPayload<'a> {
 #[derive(Serialize)]
 struct OpenAiRequest<'a> {
     model: &'a str,
-    messages: [Message<'a>; 1],
+    messages: [Message<'a>; 2],
     response_format: ResponseFormat<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user_id: Option<&'a str>,
 }
 
 #[derive(Serialize)]

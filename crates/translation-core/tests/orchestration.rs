@@ -27,6 +27,17 @@ struct ConcurrentProvider {
     maximum: AtomicUsize,
 }
 
+struct AlwaysRateLimitedProvider;
+
+impl TranslationProvider for AlwaysRateLimitedProvider {
+    fn translate(
+        &self,
+        _request: &TranslationRequest,
+    ) -> Result<TranslationResponse, ProviderError> {
+        Err(ProviderError::RateLimited)
+    }
+}
+
 impl TranslationProvider for ConcurrentProvider {
     fn translate(
         &self,
@@ -285,4 +296,37 @@ fn reports_in_flight_requests_before_the_first_batch_finishes() {
 
     assert!(snapshots.contains(&(3, 0, 6)));
     assert_eq!(snapshots.last(), Some(&(0, 6, 6)));
+}
+
+#[test]
+fn adaptive_mode_increases_concurrency_after_successful_batches() {
+    let provider = ConcurrentProvider {
+        active: AtomicUsize::new(0),
+        maximum: AtomicUsize::new(0),
+    };
+    let orchestrator = TranslationOrchestrator::new(&provider, "model", "auto", "zh-CN", 1)
+        .with_adaptive_concurrency(2, 6);
+    let segments = (0..24)
+        .map(|index| TranslationSegment::new(index.to_string(), "scene", "text"))
+        .collect::<Vec<_>>();
+
+    let result = orchestrator.run(&segments, &HashMap::new(), RunControl::Running);
+
+    assert!(provider.maximum.load(Ordering::SeqCst) > 2);
+    assert_eq!(result.concurrency_limit, 6);
+}
+
+#[test]
+fn adaptive_mode_reduces_concurrency_after_provider_failures() {
+    let orchestrator =
+        TranslationOrchestrator::new(&AlwaysRateLimitedProvider, "model", "auto", "zh-CN", 1)
+            .with_adaptive_concurrency(4, 8);
+    let segments = (0..4)
+        .map(|index| TranslationSegment::new(index.to_string(), "scene", "text"))
+        .collect::<Vec<_>>();
+
+    let result = orchestrator.run(&segments, &HashMap::new(), RunControl::Running);
+
+    assert!(result.throttle_events > 0);
+    assert!(result.concurrency_limit < 4);
 }

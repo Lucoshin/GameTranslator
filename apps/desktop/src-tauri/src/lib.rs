@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path, path::PathBuf};
+use std::{collections::HashMap, path::Path, path::PathBuf, time::Instant};
 
 use game_translator_app_core::{
     detect_game, engine_name, extract_game, CredentialStore, PatchPlan, WindowsCredentialStore,
@@ -60,6 +60,16 @@ struct TranslationProgressEvent {
     warning_findings: usize,
     blocking_findings: usize,
     message: String,
+    concurrency: usize,
+    throughput: f64,
+    eta_seconds: usize,
+}
+
+#[derive(Clone, Copy, Default)]
+struct ProgressMetrics {
+    concurrency: usize,
+    throughput: f64,
+    eta_seconds: usize,
 }
 
 struct TranslationExecution<'a> {
@@ -70,6 +80,7 @@ struct TranslationExecution<'a> {
     store: Option<&'a ProjectStore>,
     batch_size: usize,
     character_budget: usize,
+    initial_concurrency: usize,
     concurrency: usize,
 }
 
@@ -213,9 +224,14 @@ fn translate_command(
             .get("default-provider")
             .map_err(|error| error.to_string())?
             .ok_or_else(|| "尚未保存 API Key".to_owned())?;
-        Box::new(OpenAiCompatibleProvider::new(&base_url, api_key))
+        let provider = OpenAiCompatibleProvider::new(&base_url, api_key);
+        if base_url.contains("deepseek") || model.starts_with("deepseek-") {
+            Box::new(provider.with_user_id("game-translator-desktop"))
+        } else {
+            Box::new(provider)
+        }
     };
-    let (batch_size, character_budget, concurrency) =
+    let (batch_size, character_budget, initial_concurrency, concurrency) =
         performance_settings(&kind, performance.as_deref().unwrap_or("balanced"));
     let database_path = app
         .path()
@@ -237,23 +253,24 @@ fn translate_command(
             store: Some(&store),
             batch_size,
             character_budget,
+            initial_concurrency,
             concurrency,
         },
-        |phase, completed, total, failed, warnings, blocking, message| {
-            emit_progress(
-                app, &run_id, phase, completed, total, failed, warnings, blocking, message,
+        |phase, completed, total, failed, warnings, blocking, message, metrics| {
+            emit_progress_with_metrics(
+                app, &run_id, phase, completed, total, failed, warnings, blocking, message, metrics,
             );
         },
     )
 }
 
-fn performance_settings(kind: &str, mode: &str) -> (usize, usize, usize) {
+fn performance_settings(kind: &str, mode: &str) -> (usize, usize, usize, usize) {
     match (kind, mode) {
-        ("ollama", "fast") => (48, 20_000, 2),
-        ("ollama", _) => (32, 16_000, 1),
-        (_, "stable") => (32, 16_000, 4),
-        (_, "fast") => (32, 16_000, 16),
-        _ => (40, 18_000, 8),
+        ("ollama", "fast") => (48, 20_000, 2, 2),
+        ("ollama", _) => (32, 16_000, 1, 1),
+        (_, "stable") => (32, 16_000, 4, 16),
+        (_, "fast") => (16, 8_000, 16, 128),
+        _ => (24, 12_000, 8, 64),
     }
 }
 
@@ -269,6 +286,33 @@ fn emit_progress(
     blocking_findings: usize,
     message: &str,
 ) {
+    emit_progress_with_metrics(
+        app,
+        run_id,
+        phase,
+        completed,
+        total,
+        failed,
+        warning_findings,
+        blocking_findings,
+        message,
+        ProgressMetrics::default(),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_progress_with_metrics(
+    app: &tauri::AppHandle,
+    run_id: &str,
+    phase: &str,
+    completed: usize,
+    total: usize,
+    failed: usize,
+    warning_findings: usize,
+    blocking_findings: usize,
+    message: &str,
+    metrics: ProgressMetrics,
+) {
     let _ = app.emit(
         "translation-progress",
         TranslationProgressEvent {
@@ -280,6 +324,9 @@ fn emit_progress(
             warning_findings,
             blocking_findings,
             message: message.to_owned(),
+            concurrency: metrics.concurrency,
+            throughput: metrics.throughput,
+            eta_seconds: metrics.eta_seconds,
         },
     );
 }
@@ -311,12 +358,14 @@ fn translate_path_with_provider(
             store: None,
             batch_size: 32,
             character_budget: 24_000,
+            initial_concurrency: 1,
             concurrency: 1,
         },
-        |_, _, _, _, _, _, _| {},
+        |_, _, _, _, _, _, _, _| {},
     )
 }
 
+#[allow(clippy::too_many_lines)]
 fn translate_path_with_provider_and_progress<F>(
     path: &Path,
     provider: &dyn TranslationProvider,
@@ -324,7 +373,7 @@ fn translate_path_with_provider_and_progress<F>(
     mut progress: F,
 ) -> Result<TranslationRunResult, String>
 where
-    F: FnMut(&str, usize, usize, usize, usize, usize, &str),
+    F: FnMut(&str, usize, usize, usize, usize, usize, &str, ProgressMetrics),
 {
     let project = detect_game(path).map_err(|error| error.to_string())?;
     let segments = extract_game(&project).map_err(|error| error.to_string())?;
@@ -337,6 +386,7 @@ where
         0,
         0,
         "文本提取完成，正在请求模型",
+        ProgressMetrics::default(),
     );
     let mut protected = HashMap::new();
     let (fingerprints, cached) = load_cached_translations(&segments, execution);
@@ -349,6 +399,7 @@ where
             0,
             0,
             &format!("命中 {} 条翻译缓存", cached.len()),
+            ProgressMetrics::default(),
         );
     }
     let translation_segments = segments
@@ -368,7 +419,9 @@ where
         execution.batch_size,
     )
     .with_batch_character_budget(execution.character_budget)
-    .with_concurrency(execution.concurrency);
+    .with_adaptive_concurrency(execution.initial_concurrency, execution.concurrency);
+    let translation_started = Instant::now();
+    let cached_count = cached.len();
     let run = orchestrator.run_with_progress(
         &translation_segments,
         &cached,
@@ -376,6 +429,13 @@ where
         |current| {
             let completed = current.translations.len() + current.failed_segment_ids.len();
             let message = translation_progress_message(current);
+            let metrics = calculate_progress_metrics(
+                current,
+                cached_count,
+                completed,
+                total,
+                translation_started.elapsed(),
+            );
             progress(
                 "translating",
                 completed,
@@ -384,6 +444,7 @@ where
                 0,
                 0,
                 &message,
+                metrics,
             );
         },
     );
@@ -395,6 +456,7 @@ where
         0,
         0,
         "模型翻译结束，正在执行质量检查",
+        ProgressMetrics::default(),
     );
     let (items, warning_findings, blocking_findings) = restore_and_check(
         segments,
@@ -414,6 +476,7 @@ where
         warning_findings,
         blocking_findings,
         "任务完成，可以校对或导出",
+        ProgressMetrics::default(),
     );
 
     Ok(TranslationRunResult {
@@ -439,6 +502,33 @@ fn translation_progress_message(current: &RunResult) -> String {
     )
 }
 
+fn calculate_progress_metrics(
+    current: &RunResult,
+    cached_count: usize,
+    completed: usize,
+    total: usize,
+    elapsed: std::time::Duration,
+) -> ProgressMetrics {
+    let network_completed =
+        current.translations.len().saturating_sub(cached_count) + current.failed_segment_ids.len();
+    let count = u32::try_from(network_completed).unwrap_or(u32::MAX);
+    let throughput = f64::from(count) / elapsed.as_secs_f64().max(0.001);
+    let remaining = u128::try_from(total.saturating_sub(completed)).unwrap_or(u128::MAX);
+    let eta_millis = if network_completed == 0 {
+        0
+    } else {
+        remaining
+            .saturating_mul(elapsed.as_millis())
+            .checked_div(u128::try_from(network_completed).unwrap_or(u128::MAX))
+            .unwrap_or(0)
+    };
+    ProgressMetrics {
+        concurrency: current.concurrency_limit,
+        throughput,
+        eta_seconds: usize::try_from(eta_millis.div_ceil(1_000)).unwrap_or(usize::MAX),
+    }
+}
+
 fn restore_and_check<F>(
     segments: Vec<Segment>,
     run: &RunResult,
@@ -449,7 +539,7 @@ fn restore_and_check<F>(
     progress: &mut F,
 ) -> Result<(Vec<TranslationItem>, usize, usize), String>
 where
-    F: FnMut(&str, usize, usize, usize, usize, usize, &str),
+    F: FnMut(&str, usize, usize, usize, usize, usize, &str, ProgressMetrics),
 {
     let total = segments.len();
     let mut items = Vec::with_capacity(run.translations.len());
@@ -510,6 +600,7 @@ where
                 warning_findings,
                 blocking_findings,
                 &format!("质量检查 {checked} / {total}"),
+                ProgressMetrics::default(),
             );
         }
     }
@@ -654,6 +745,14 @@ mod tests {
     }
 
     #[test]
+    fn deepseek_fast_mode_uses_small_batches_and_adaptive_headroom() {
+        assert_eq!(
+            super::performance_settings("openai", "fast"),
+            (16, 8_000, 16, 128)
+        );
+    }
+
+    #[test]
     fn scans_a_real_rpg_maker_fixture() {
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../../fixtures/rpgmaker-mz-dialogue");
@@ -747,13 +846,14 @@ mod tests {
                 store: Some(&store),
                 batch_size: 4,
                 character_budget: 10_000,
+                initial_concurrency: 2,
                 concurrency: 2,
             };
             super::translate_path_with_provider_and_progress(
                 &fixture,
                 &provider,
                 &execution,
-                |_, _, _, _, _, _, _| {},
+                |_, _, _, _, _, _, _, _| {},
             )
             .unwrap();
             let first_run_calls = provider.0.load(Ordering::SeqCst);
@@ -762,7 +862,7 @@ mod tests {
                 &fixture,
                 &provider,
                 &execution,
-                |_, _, _, _, _, _, _| {},
+                |_, _, _, _, _, _, _, _| {},
             )
             .unwrap();
 

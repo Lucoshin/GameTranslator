@@ -13,7 +13,7 @@ import "./styles/global.css";
 type View = "overview" | "translation" | "review" | "export";
 export type TranslationItem = { id: string; source: string; target: string; speaker: string | null; sourceFile: string; qa: "passed" | "warning" | "blocking" };
 export type TranslationRun = { items: TranslationItem[]; warningFindings: number; blockingFindings: number; failedSegmentIds: string[] };
-export type TranslationProgressState = { phase: "idle" | "extracting" | "translating" | "qa" | "completed" | "failed"; completed: number; total: number; failed: number; warningFindings: number; blockingFindings: number; message: string };
+export type TranslationProgressState = { phase: "idle" | "extracting" | "translating" | "qa" | "completed" | "failed"; completed: number; total: number; failed: number; warningFindings: number; blockingFindings: number; message: string; concurrency?: number; throughput?: number; etaSeconds?: number };
 export type TranslationLog = { time: string; message: string };
 type TranslationProgressEvent = TranslationProgressState & { runId: string };
 type ExportResult = { outputPath: string; fileCount: number };

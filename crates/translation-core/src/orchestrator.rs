@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, VecDeque},
-    sync::{mpsc, Mutex},
+    sync::{mpsc, Arc, Condvar, Mutex},
     thread,
     time::Instant,
 };
@@ -33,6 +33,8 @@ pub struct RunResult {
     pub completed_batches: usize,
     pub total_batches: usize,
     pub last_batch_millis: u128,
+    pub concurrency_limit: usize,
+    pub throttle_events: usize,
 }
 
 pub struct TranslationOrchestrator<'a> {
@@ -43,6 +45,7 @@ pub struct TranslationOrchestrator<'a> {
     maximum_batch_size: usize,
     maximum_batch_characters: usize,
     maximum_concurrency: usize,
+    initial_concurrency: usize,
 }
 
 impl<'a> TranslationOrchestrator<'a> {
@@ -62,12 +65,25 @@ impl<'a> TranslationOrchestrator<'a> {
             maximum_batch_size: maximum_batch_size.max(1),
             maximum_batch_characters: 24_000,
             maximum_concurrency: 1,
+            initial_concurrency: 1,
         }
     }
 
     #[must_use]
     pub fn with_concurrency(mut self, maximum_concurrency: usize) -> Self {
         self.maximum_concurrency = maximum_concurrency.max(1);
+        self.initial_concurrency = self.maximum_concurrency;
+        self
+    }
+
+    #[must_use]
+    pub fn with_adaptive_concurrency(
+        mut self,
+        initial_concurrency: usize,
+        maximum_concurrency: usize,
+    ) -> Self {
+        self.maximum_concurrency = maximum_concurrency.max(1);
+        self.initial_concurrency = initial_concurrency.clamp(1, self.maximum_concurrency);
         self
     }
 
@@ -106,6 +122,8 @@ impl<'a> TranslationOrchestrator<'a> {
             completed_batches: 0,
             total_batches: 0,
             last_batch_millis: 0,
+            concurrency_limit: self.initial_concurrency,
+            throttle_events: 0,
         };
         if control == RunControl::Paused {
             result.status = RunStatus::Paused;
@@ -143,22 +161,36 @@ impl<'a> TranslationOrchestrator<'a> {
         result.total_batches = batches.len();
         let worker_count = self.maximum_concurrency.min(batches.len());
         let queue = Mutex::new(VecDeque::from(batches));
+        let limiter = Arc::new(AdaptiveLimiter::new(
+            self.initial_concurrency.min(worker_count),
+            worker_count,
+        ));
         let (sender, receiver) = mpsc::channel();
         thread::scope(|scope| {
             for _ in 0..worker_count {
                 let sender = sender.clone();
                 let queue = &queue;
+                let limiter = Arc::clone(&limiter);
                 scope.spawn(move || loop {
                     let batch = queue.lock().expect("batch queue poisoned").pop_front();
                     let Some(batch) = batch else { break };
-                    if sender.send(BatchEvent::Started).is_err() {
+                    let concurrency_limit = limiter.acquire();
+                    if sender
+                        .send(BatchEvent::Started { concurrency_limit })
+                        .is_err()
+                    {
+                        limiter.release(false);
                         break;
                     }
                     let started = Instant::now();
                     let mut outcome = BatchOutcome::default();
                     self.translate_with_split(&batch, &mut outcome);
                     outcome.elapsed_millis = started.elapsed().as_millis();
-                    if sender.send(BatchEvent::Finished(outcome)).is_err() {
+                    let state = limiter.release(outcome.failed_segment_ids.is_empty());
+                    if sender
+                        .send(BatchEvent::Finished { outcome, state })
+                        .is_err()
+                    {
                         break;
                     }
                 });
@@ -166,9 +198,14 @@ impl<'a> TranslationOrchestrator<'a> {
             drop(sender);
             while let Ok(event) = receiver.recv() {
                 match event {
-                    BatchEvent::Started => result.active_requests += 1,
-                    BatchEvent::Finished(outcome) => {
+                    BatchEvent::Started { concurrency_limit } => {
+                        result.active_requests += 1;
+                        result.concurrency_limit = concurrency_limit;
+                    }
+                    BatchEvent::Finished { outcome, state } => {
                         result.active_requests = result.active_requests.saturating_sub(1);
+                        result.concurrency_limit = state.target;
+                        result.throttle_events = state.throttle_events;
                         result.completed_batches += 1;
                         result.last_batch_millis = outcome.elapsed_millis;
                         result.translations.extend(outcome.translations);
@@ -249,8 +286,77 @@ struct BatchOutcome {
 }
 
 enum BatchEvent {
-    Started,
-    Finished(BatchOutcome),
+    Started {
+        concurrency_limit: usize,
+    },
+    Finished {
+        outcome: BatchOutcome,
+        state: LimiterSnapshot,
+    },
+}
+
+struct AdaptiveLimiter {
+    state: Mutex<LimiterState>,
+    changed: Condvar,
+    maximum: usize,
+}
+
+struct LimiterState {
+    active: usize,
+    target: usize,
+    successful_batches: usize,
+    throttle_events: usize,
+}
+
+#[derive(Clone, Copy)]
+struct LimiterSnapshot {
+    target: usize,
+    throttle_events: usize,
+}
+
+impl AdaptiveLimiter {
+    fn new(initial: usize, maximum: usize) -> Self {
+        Self {
+            state: Mutex::new(LimiterState {
+                active: 0,
+                target: initial,
+                successful_batches: 0,
+                throttle_events: 0,
+            }),
+            changed: Condvar::new(),
+            maximum,
+        }
+    }
+
+    fn acquire(&self) -> usize {
+        let mut state = self.state.lock().expect("adaptive limiter poisoned");
+        while state.active >= state.target {
+            state = self.changed.wait(state).expect("adaptive limiter poisoned");
+        }
+        state.active += 1;
+        state.target
+    }
+
+    fn release(&self, success: bool) -> LimiterSnapshot {
+        let mut state = self.state.lock().expect("adaptive limiter poisoned");
+        state.active = state.active.saturating_sub(1);
+        if success {
+            state.successful_batches += 1;
+            if state.successful_batches % 4 == 0 && state.target < self.maximum {
+                state.target += 1;
+            }
+        } else {
+            state.target = (state.target / 2).max(1);
+            state.throttle_events += 1;
+            state.successful_batches = 0;
+        }
+        let snapshot = LimiterSnapshot {
+            target: state.target,
+            throttle_events: state.throttle_events,
+        };
+        self.changed.notify_all();
+        snapshot
+    }
 }
 
 fn response_matches(batch: &[TranslationSegment], response: &TranslationResponse) -> bool {
