@@ -1,12 +1,9 @@
-export function ProjectHome({ onSelect, onOpenDemo, onConfigure, providerName, error, scanning }: { onSelect: () => void; onOpenDemo: () => void; onConfigure: () => void; providerName: string | null; error: string | null; scanning: boolean }) {
+export function ProjectHome({ onSelect, onEnterOverview, onConfigure, onReturn, providerName, error, scanning }: { onSelect: () => void; onEnterOverview: () => void; onConfigure: () => void; onReturn?: () => void; providerName: string | null; error: string | null; scanning: boolean }) {
   return (
     <main className="home-screen">
       <div className="paper-grain" />
       <header className="home-header">
-        <a className="wordmark" href="#top" aria-label="GameTranslator 首页">
-          <span className="seal">译</span>
-          <span>GameTranslator</span>
-        </a>
+        {onReturn ? <button className="wordmark home-return" aria-label="返回项目概览" onClick={onReturn}><span className="seal">译</span><span>GameTranslator</span></button> : <button className="wordmark" aria-label="进入项目概览" onClick={onEnterOverview}><span className="seal">译</span><span>GameTranslator</span></button>}
         <div className="home-settings"><span className={providerName ? "model-chip" : "model-chip inactive"}><i />{providerName ?? "模型未配置"}</span><button className="text-button" aria-label="主界面配置模型" onClick={onConfigure}>配置模型</button><span className="version">OPEN SOURCE · v0.1 PREVIEW</span></div>
       </header>
 
@@ -15,16 +12,15 @@ export function ProjectHome({ onSelect, onOpenDemo, onConfigure, providerName, e
           <p className="kicker">游戏文本，本地处理</p>
           <h1>让另一种语言，<br /><em>住进同一个世界。</em></h1>
           <p className="hero-lead">
-            支持 RPG Maker MV / MZ 与 Ren'Py 的游戏翻译工作台。你持有模型密钥，原始游戏保持不变。
+            支持 RPG Maker、Ren'Py 与 RimWorld 模组的本地化工作台。你持有模型密钥，原始内容保持不变。
           </p>
           <div className="hero-actions">
-            <button className="primary-action" aria-label="选择游戏目录" disabled={scanning} onClick={onSelect}>
-              {scanning ? "正在识别并提取文本…" : "选择游戏目录"} <span>↗</span>
+            <button className="primary-action" aria-label="选择内容目录" disabled={scanning} onClick={onSelect}>
+              {scanning ? "正在识别并提取文本…" : "选择游戏或模组目录"} <span>↗</span>
             </button>
-            <button className="ghost-action" onClick={onOpenDemo}>载入演示项目</button>
           </div>
           {error ? <p className="home-error" role="alert">{error}</p> : null}
-          <p className="availability">支持 RPG Maker MV / MZ 与 Ren'Py 8.x 发行版</p>
+          <p className="availability">支持 RPG Maker MV / MZ、Ren'Py 8.x 与 RimWorld 英文语言包模组</p>
         </div>
 
         <div className="hero-art" aria-hidden="true">
@@ -37,9 +33,7 @@ export function ProjectHome({ onSelect, onOpenDemo, onConfigure, providerName, e
           </div>
           <div className="script-sheet sheet-front">
             <span className="sheet-label">TRANSLATION</span>
-            <p>「やっと着いた。」</p>
             <div className="proof-mark">译</div>
-            <p className="translated">“终于到了。”</p>
           </div>
           <div className="vertical-type">物語を、もっと近くへ</div>
         </div>

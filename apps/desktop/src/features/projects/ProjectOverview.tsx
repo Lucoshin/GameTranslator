@@ -1,16 +1,26 @@
-export type ProjectSummary = { projectPath: string; projectName: string; engine: string; segmentCount: number; demo: boolean };
+import type { TranslationItem } from "../../App";
 
-export function ProjectOverview({ project, configured, onConfigure, onStart }: { project: ProjectSummary; configured: boolean; onConfigure: () => void; onStart: () => void }) {
+export type ProjectSummary = { projectPath: string; projectName: string; engine: string; segmentCount: number; previewItems?: TranslationItem[] };
+
+export function ProjectOverview({ project, configured, scanning, onConfigure, onSelect, onStart }: { project: ProjectSummary | null; configured: boolean; scanning: boolean; onConfigure: () => void; onSelect: () => void; onStart: () => void }) {
+  if (!project) {
+    return <div className="page overview-page empty-project-overview">
+      <section className="page-heading">
+        <div><p className="kicker">PROJECT WORKSPACE</p><h1>开始一个项目</h1><p className="muted">先选择受支持的游戏或模组目录，扫描完成后即可在此配置语言、预览原文并开始翻译。</p></div>
+        <div className="stamp-status">待选择</div>
+      </section>
+      <section className="panel empty-project-panel"><div><b>尚未选择内容目录</b><p>支持 RPG Maker MV / MZ、Ren'Py 与 RimWorld 模组；原始内容始终保持只读，补丁会导出到独立目录。</p></div><button className="primary-action" aria-label="概览页选择内容目录" disabled={scanning} onClick={onSelect}>{scanning ? "正在识别…" : "选择游戏或模组目录"} <span>→</span></button></section>
+    </div>;
+  }
   return (
     <div className="page overview-page">
-      {project.demo ? <div className="demo-banner"><span>DEMO</span> 演示数据，不会读取或修改本地文件</div> : null}
       <section className="page-heading">
         <div>
           <p className="kicker">项目已就绪</p>
           <h1>{project.projectName}</h1>
           <p className="muted">{project.projectPath} · <b>{project.engine}</b></p>
         </div>
-        <div className="stamp-status">可翻译</div>
+        <div className="overview-heading-actions"><button className="secondary-action" aria-label="概览页选择内容目录" disabled={scanning} onClick={onSelect}>{scanning ? "正在识别…" : "选择内容目录"}</button><div className="stamp-status">可翻译</div></div>
       </section>
 
       <section className="stat-grid">
@@ -22,7 +32,7 @@ export function ProjectOverview({ project, configured, onConfigure, onStart }: {
       <div className="overview-grid">
         <section className="panel source-map">
           <div className="panel-title"><span>文本构成</span><small>SCAN RESULT</small></div>
-          {project.demo ? <><div className="source-row"><b>地图事件</b><span><i style={{ width: "78%" }} /></span><em>842</em></div><div className="source-row"><b>公共事件</b><span><i style={{ width: "42%" }} /></span><em>196</em></div><div className="source-row"><b>数据库</b><span><i style={{ width: "53%" }} /></span><em>246</em></div></> : <div className="source-row"><b>已提取</b><span><i style={{ width: "100%" }} /></span><em>{project.segmentCount}</em></div>}
+          <div className="source-row"><b>已提取</b><span><i style={{ width: "100%" }} /></span><em>{project.segmentCount}</em></div>
         </section>
 
         <section className="panel launch-panel">

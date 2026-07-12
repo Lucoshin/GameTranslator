@@ -1,0 +1,15 @@
+[package]
+name = "game-translator-content-game"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+game-translator-content-core = { path = "../content-core" }
+game-translator-engine-core = { path = "../engine-core" }
+game-translator-engine-renpy = { path = "../engine-renpy" }
+game-translator-engine-rpgmaker = { path = "../engine-rpgmaker" }
+
+[lints]
+workspace = true

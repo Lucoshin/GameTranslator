@@ -164,18 +164,59 @@ fn parse_placeholders(value: &str) -> Result<Vec<PlaceholderOccurrence>, Placeho
     while let Some(relative_start) = value[cursor..].find("<ph") {
         let start = cursor + relative_start;
         let remainder = &value[start..];
-        let Some(id_text) = remainder.strip_prefix("<ph id=\"") else {
-            return Err(PlaceholderError::MalformedMarkup);
-        };
-        let Some(id_end) = id_text.find("\"/>") else {
-            return Err(PlaceholderError::MalformedMarkup);
-        };
-        let id = id_text[..id_end]
-            .parse::<usize>()
-            .map_err(|_| PlaceholderError::MalformedMarkup)?;
-        let end = start + "<ph id=\"".len() + id_end + "\"/>".len();
+        let (id, length) = parse_placeholder(remainder)?;
+        let end = start + length;
         occurrences.push(PlaceholderOccurrence { id, start, end });
         cursor = end;
     }
     Ok(occurrences)
+}
+
+fn parse_placeholder(value: &str) -> Result<(usize, usize), PlaceholderError> {
+    let bytes = value.as_bytes();
+    if !bytes.starts_with(b"<ph") {
+        return Err(PlaceholderError::MalformedMarkup);
+    }
+    let mut cursor = 3;
+    skip_ascii_whitespace(bytes, &mut cursor);
+    if !bytes
+        .get(cursor..)
+        .is_some_and(|rest| rest.starts_with(b"id"))
+    {
+        return Err(PlaceholderError::MalformedMarkup);
+    }
+    cursor += 2;
+    skip_ascii_whitespace(bytes, &mut cursor);
+    if bytes.get(cursor) != Some(&b'=') {
+        return Err(PlaceholderError::MalformedMarkup);
+    }
+    cursor += 1;
+    skip_ascii_whitespace(bytes, &mut cursor);
+    let quote = *bytes.get(cursor).ok_or(PlaceholderError::MalformedMarkup)?;
+    if !matches!(quote, b'\'' | b'"') {
+        return Err(PlaceholderError::MalformedMarkup);
+    }
+    cursor += 1;
+    let digits_start = cursor;
+    while bytes.get(cursor).is_some_and(u8::is_ascii_digit) {
+        cursor += 1;
+    }
+    if cursor == digits_start || bytes.get(cursor) != Some(&quote) {
+        return Err(PlaceholderError::MalformedMarkup);
+    }
+    let id = value[digits_start..cursor]
+        .parse::<usize>()
+        .map_err(|_| PlaceholderError::MalformedMarkup)?;
+    cursor += 1;
+    skip_ascii_whitespace(bytes, &mut cursor);
+    if bytes.get(cursor..cursor + 2) != Some(b"/>") {
+        return Err(PlaceholderError::MalformedMarkup);
+    }
+    Ok((id, cursor + 2))
+}
+
+fn skip_ascii_whitespace(bytes: &[u8], cursor: &mut usize) {
+    while bytes.get(*cursor).is_some_and(u8::is_ascii_whitespace) {
+        *cursor += 1;
+    }
 }

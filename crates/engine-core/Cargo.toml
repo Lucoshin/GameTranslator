@@ -5,6 +5,8 @@ license.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[dependencies]
+game-translator-content-core = { path = "../content-core" }
+
 [lints]
 workspace = true
-

@@ -6,11 +6,12 @@ it("renders backend progress instead of fake completion data", () => {
   render(
     <TranslationProgress
       result={null}
-      demo={false}
       loading
       error={null}
       progress={{ phase: "translating", completed: 25, total: 100, failed: 1, warningFindings: 2, blockingFindings: 0, message: "已完成模型批次 25 / 100", concurrency: 16, throughput: 12.5, etaSeconds: 60 }}
       logs={[{ time: "09:42:12", message: "已完成模型批次 25 / 100" }]}
+      sourceCount={100}
+      onStart={vi.fn()}
       onReview={vi.fn()}
       onExport={vi.fn()}
     />
@@ -32,11 +33,12 @@ it("shows a live elapsed timer while translation is running", () => {
   render(
     <TranslationProgress
       result={null}
-      demo={false}
       loading
       error={null}
       progress={{ phase: "translating", completed: 0, total: 100, failed: 0, warningFindings: 0, blockingFindings: 0, message: "已启动 8 路并发请求" }}
       logs={[]}
+      sourceCount={100}
+      onStart={vi.fn()}
       onReview={vi.fn()}
       onExport={vi.fn()}
     />

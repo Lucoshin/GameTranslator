@@ -7,6 +7,7 @@ pub enum SegmentKind {
     ScrollingText,
     DatabaseName,
     DatabaseDescription,
+    LocalizedKey,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -21,7 +22,8 @@ pub struct Segment {
     pub id: String,
     pub source: String,
     pub source_file: PathBuf,
-    pub json_path: String,
+    /// Format-specific address of the source text within `source_file`.
+    pub location: String,
     pub kind: SegmentKind,
     pub context: SegmentContext,
 }

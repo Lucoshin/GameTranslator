@@ -140,7 +140,7 @@ fn extract_database(path: &Path, output: &mut Vec<Segment>) -> Result<(), Engine
                 id: format!("{file_name}:{id_path}"),
                 source: source.to_owned(),
                 source_file: path.to_path_buf(),
-                json_path,
+                location: json_path,
                 kind,
                 context: SegmentContext {
                     speaker: None,

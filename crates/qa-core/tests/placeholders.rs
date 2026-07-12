@@ -83,3 +83,14 @@ fn protects_and_restores_renpy_interpolation_and_text_tags() {
         "[mc] scored {color=#f00}[player.score]{/color} points"
     );
 }
+
+#[test]
+fn restores_safe_model_variants_of_placeholder_markup() {
+    let protected = protect_placeholders("{i}Давай ему поможем...{/i}");
+
+    assert_eq!(
+        restore_placeholders(&protected, "<ph id=\"0\" />手伝ってあげよう...<ph id='1'/>",)
+            .unwrap(),
+        "{i}手伝ってあげよう...{/i}"
+    );
+}

@@ -1,7 +1,9 @@
+mod content;
 mod credentials;
 mod engine;
 mod patch;
 
+pub use content::{detect_content, export_content, extract_content};
 pub use credentials::{
     CredentialError, CredentialStore, InMemoryCredentialStore, ProviderConfiguration,
     WindowsCredentialStore,

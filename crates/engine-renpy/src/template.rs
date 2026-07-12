@@ -124,7 +124,7 @@ fn segment(
         id: format!("renpy:{}::{block}::{line}", relative.display()),
         source,
         source_file: source_file.to_path_buf(),
-        json_path: format!("{}::{block}::{line}", relative.display()),
+        location: format!("{}::{block}::{line}", relative.display()),
         kind: metadata.1,
         context: SegmentContext {
             speaker: metadata.0,

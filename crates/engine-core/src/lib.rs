@@ -1,7 +1,6 @@
 mod adapter;
 mod project;
-mod segment;
 
 pub use adapter::{EngineAdapter, EngineError};
+pub use game_translator_content_core::{Segment, SegmentContext, SegmentKind};
 pub use project::{DetectedProject, EngineKind};
-pub use segment::{Segment, SegmentContext, SegmentKind};

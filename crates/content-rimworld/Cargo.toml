@@ -1,0 +1,13 @@
+[package]
+name = "game-translator-content-rimworld"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+game-translator-content-core = { path = "../content-core" }
+quick-xml.workspace = true
+
+[lints]
+workspace = true

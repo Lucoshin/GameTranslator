@@ -1,5 +1,13 @@
 import { useState } from "react";
 
+const OPENAI_COMPATIBLE_PRESETS = [
+  ["OpenAI", "https://api.openai.com/v1"],
+  ["DeepSeek", "https://api.deepseek.com/v1"],
+  ["通义千问（中国大陆）", "https://dashscope.aliyuncs.com/compatible-mode/v1"],
+  ["硅基流动", "https://api.siliconflow.cn/v1"],
+  ["OpenRouter", "https://openrouter.ai/api/v1"],
+] as const;
+
 export type ProviderConfiguration = {
   kind: "openai" | "ollama";
   baseUrl: string;
@@ -34,7 +42,10 @@ export function ProviderDrawer({
           <button className={kind === "openai" ? "active" : ""} onClick={() => { setKind("openai"); setBaseUrl("https://api.example.com/v1"); }}>OpenAI-compatible</button>
           <button className={kind === "ollama" ? "active" : ""} onClick={() => { setKind("ollama"); setBaseUrl("http://127.0.0.1:11434"); }}>Ollama</button>
         </div>
-        <label>Base URL<input aria-label="Base URL" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} /></label>
+        <div className="base-url-fields">
+          <label>Base URL<input aria-label="Base URL" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} /></label>
+          {kind === "openai" ? <label>常见格式<select aria-label="常见格式" value={OPENAI_COMPATIBLE_PRESETS.some(([, url]) => url === baseUrl) ? baseUrl : ""} onChange={(event) => { if (event.target.value) setBaseUrl(event.target.value); }}><option value="">自定义</option>{OPENAI_COMPATIBLE_PRESETS.map(([name, url]) => <option key={url} value={url}>{name}</option>)}</select></label> : null}
+        </div>
         {kind === "openai" ? <label>API Key<input aria-label="API Key" value={apiKey} onChange={(event) => setApiKey(event.target.value)} type="password" placeholder="sk-••••••••" /></label> : null}
         <label>模型名称<input value={model} onChange={(event) => setModel(event.target.value)} placeholder="例如 deepseek-chat" /></label>
         <label>性能模式<select aria-label="性能模式" value={performance} onChange={(event) => setPerformance(event.target.value as "stable" | "balanced" | "fast")}><option value="stable">稳定 · 低并发</option><option value="balanced">均衡 · 推荐</option><option value="fast">极速 · 高并发</option></select></label>

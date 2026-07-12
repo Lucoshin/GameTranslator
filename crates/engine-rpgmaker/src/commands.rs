@@ -121,7 +121,7 @@ fn new_segment(
         id: format!("{file_name}:{id_path}"),
         source: source.to_owned(),
         source_file: source_file.to_path_buf(),
-        json_path,
+        location: json_path,
         kind,
         context: SegmentContext {
             speaker,

@@ -1244,6 +1244,9 @@ dependencies = [
 name = "game-translator-app-core"
 version = "0.1.0"
 dependencies = [
+ "game-translator-content-core",
+ "game-translator-content-game",
+ "game-translator-content-rimworld",
  "game-translator-engine-core",
  "game-translator-engine-renpy",
  "game-translator-engine-rpgmaker",
@@ -1252,6 +1255,28 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "game-translator-content-core"
+version = "0.1.0"
+
+[[package]]
+name = "game-translator-content-game"
+version = "0.1.0"
+dependencies = [
+ "game-translator-content-core",
+ "game-translator-engine-core",
+ "game-translator-engine-renpy",
+ "game-translator-engine-rpgmaker",
+]
+
+[[package]]
+name = "game-translator-content-rimworld"
+version = "0.1.0"
+dependencies = [
+ "game-translator-content-core",
+ "quick-xml 0.39.4",
 ]
 
 [[package]]
@@ -1276,6 +1301,9 @@ dependencies = [
 [[package]]
 name = "game-translator-engine-core"
 version = "0.1.0"
+dependencies = [
+ "game-translator-content-core",
+]
 
 [[package]]
 name = "game-translator-engine-renpy"

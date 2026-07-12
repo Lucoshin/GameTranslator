@@ -9,7 +9,7 @@ use crate::extract_project;
 ///
 /// # Errors
 ///
-/// Returns [`EngineError`] when source JSON cannot be read, a recorded path no longer resolves,
+/// Returns [`EngineError`] when source JSON cannot be read, a recorded location no longer resolves,
 /// output directories cannot be created, or rendered JSON cannot be written.
 pub fn write_translations<S: BuildHasher>(
     project: &DetectedProject,
@@ -41,16 +41,19 @@ pub fn write_translations<S: BuildHasher>(
                 message: error.to_string(),
             })?;
         for (segment, translation) in replacements {
-            let target = value_at_path_mut(&mut document, &segment.json_path).ok_or_else(|| {
+            let target = value_at_path_mut(&mut document, &segment.location).ok_or_else(|| {
                 EngineError::InvalidData {
                     path: source_path.clone(),
-                    message: format!("translation path no longer exists: {}", segment.json_path),
+                    message: format!(
+                        "translation location no longer exists: {}",
+                        segment.location
+                    ),
                 }
             })?;
             if !target.is_string() {
                 return Err(EngineError::InvalidData {
                     path: source_path.clone(),
-                    message: format!("translation path is not a string: {}", segment.json_path),
+                    message: format!("translation location is not a string: {}", segment.location),
                 });
             }
             *target = Value::String(translation.clone());
