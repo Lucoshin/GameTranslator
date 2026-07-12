@@ -252,8 +252,8 @@ fn performance_settings(kind: &str, mode: &str) -> (usize, usize, usize) {
         ("ollama", "fast") => (48, 20_000, 2),
         ("ollama", _) => (32, 16_000, 1),
         (_, "stable") => (32, 16_000, 4),
-        (_, "fast") => (96, 32_000, 16),
-        _ => (64, 24_000, 8),
+        (_, "fast") => (32, 16_000, 16),
+        _ => (40, 18_000, 8),
     }
 }
 
@@ -375,6 +375,7 @@ where
         RunControl::Running,
         |current| {
             let completed = current.translations.len() + current.failed_segment_ids.len();
+            let message = translation_progress_message(current);
             progress(
                 "translating",
                 completed,
@@ -382,7 +383,7 @@ where
                 current.failed_segment_ids.len(),
                 0,
                 0,
-                &format!("模型已处理 {completed} / {total} 个片段"),
+                &message,
             );
         },
     );
@@ -421,6 +422,21 @@ where
         blocking_findings,
         failed_segment_ids: run.failed_segment_ids,
     })
+}
+
+fn translation_progress_message(current: &RunResult) -> String {
+    if current.completed_batches == 0 {
+        return format!(
+            "已启动 {} 路并发请求 · 共 {} 个批次",
+            current.active_requests, current.total_batches
+        );
+    }
+    let seconds = current.last_batch_millis / 1_000;
+    let tenths = current.last_batch_millis % 1_000 / 100;
+    format!(
+        "批次 {}/{} · 活动请求 {} · 最近耗时 {seconds}.{tenths} 秒",
+        current.completed_batches, current.total_batches, current.active_requests
+    )
 }
 
 fn restore_and_check<F>(

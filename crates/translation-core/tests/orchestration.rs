@@ -214,7 +214,11 @@ fn reports_real_progress_after_each_completed_batch() {
         &segments,
         &HashMap::new(),
         RunControl::Running,
-        |progress| completed.push(progress.translations.len()),
+        |progress| {
+            if progress.completed_batches > completed.len() {
+                completed.push(progress.translations.len());
+            }
+        },
     );
 
     assert_eq!(result.translations.len(), 3);
@@ -251,4 +255,34 @@ fn runs_independent_batches_with_bounded_concurrency() {
 
     assert_eq!(result.translations.len(), 6);
     assert_eq!(provider.maximum.load(Ordering::SeqCst), 3);
+}
+
+#[test]
+fn reports_in_flight_requests_before_the_first_batch_finishes() {
+    let provider = ConcurrentProvider {
+        active: AtomicUsize::new(0),
+        maximum: AtomicUsize::new(0),
+    };
+    let orchestrator =
+        TranslationOrchestrator::new(&provider, "model", "auto", "zh-CN", 1).with_concurrency(3);
+    let segments = (0..6)
+        .map(|index| TranslationSegment::new(index.to_string(), index.to_string(), "text"))
+        .collect::<Vec<_>>();
+    let mut snapshots = Vec::new();
+
+    let _ = orchestrator.run_with_progress(
+        &segments,
+        &HashMap::new(),
+        RunControl::Running,
+        |progress| {
+            snapshots.push((
+                progress.active_requests,
+                progress.completed_batches,
+                progress.total_batches,
+            ));
+        },
+    );
+
+    assert!(snapshots.contains(&(3, 0, 6)));
+    assert_eq!(snapshots.last(), Some(&(0, 6, 6)));
 }

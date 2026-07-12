@@ -2,6 +2,7 @@ use std::{
     collections::{HashMap, VecDeque},
     sync::{mpsc, Mutex},
     thread,
+    time::Instant,
 };
 
 use game_translator_provider_core::{
@@ -28,6 +29,10 @@ pub struct RunResult {
     pub status: RunStatus,
     pub translations: HashMap<String, String>,
     pub failed_segment_ids: Vec<String>,
+    pub active_requests: usize,
+    pub completed_batches: usize,
+    pub total_batches: usize,
+    pub last_batch_millis: u128,
 }
 
 pub struct TranslationOrchestrator<'a> {
@@ -97,6 +102,10 @@ impl<'a> TranslationOrchestrator<'a> {
             status: RunStatus::Completed,
             translations: cached.clone(),
             failed_segment_ids: Vec::new(),
+            active_requests: 0,
+            completed_batches: 0,
+            total_batches: 0,
+            last_batch_millis: 0,
         };
         if control == RunControl::Paused {
             result.status = RunStatus::Paused;
@@ -131,6 +140,7 @@ impl<'a> TranslationOrchestrator<'a> {
         if batches.is_empty() {
             return;
         }
+        result.total_batches = batches.len();
         let worker_count = self.maximum_concurrency.min(batches.len());
         let queue = Mutex::new(VecDeque::from(batches));
         let (sender, receiver) = mpsc::channel();
@@ -141,17 +151,30 @@ impl<'a> TranslationOrchestrator<'a> {
                 scope.spawn(move || loop {
                     let batch = queue.lock().expect("batch queue poisoned").pop_front();
                     let Some(batch) = batch else { break };
+                    if sender.send(BatchEvent::Started).is_err() {
+                        break;
+                    }
+                    let started = Instant::now();
                     let mut outcome = BatchOutcome::default();
                     self.translate_with_split(&batch, &mut outcome);
-                    if sender.send(outcome).is_err() {
+                    outcome.elapsed_millis = started.elapsed().as_millis();
+                    if sender.send(BatchEvent::Finished(outcome)).is_err() {
                         break;
                     }
                 });
             }
             drop(sender);
-            while let Ok(outcome) = receiver.recv() {
-                result.translations.extend(outcome.translations);
-                result.failed_segment_ids.extend(outcome.failed_segment_ids);
+            while let Ok(event) = receiver.recv() {
+                match event {
+                    BatchEvent::Started => result.active_requests += 1,
+                    BatchEvent::Finished(outcome) => {
+                        result.active_requests = result.active_requests.saturating_sub(1);
+                        result.completed_batches += 1;
+                        result.last_batch_millis = outcome.elapsed_millis;
+                        result.translations.extend(outcome.translations);
+                        result.failed_segment_ids.extend(outcome.failed_segment_ids);
+                    }
+                }
                 on_progress(result);
             }
         });
@@ -222,6 +245,12 @@ impl<'a> TranslationOrchestrator<'a> {
 struct BatchOutcome {
     translations: HashMap<String, String>,
     failed_segment_ids: Vec<String>,
+    elapsed_millis: u128,
+}
+
+enum BatchEvent {
+    Started,
+    Finished(BatchOutcome),
 }
 
 fn response_matches(batch: &[TranslationSegment], response: &TranslationResponse) -> bool {
