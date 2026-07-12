@@ -25,6 +25,11 @@ pub struct TranslationRequest {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct TranslationOutput {
     pub id: String,
+    #[serde(
+        alias = "translated",
+        alias = "translated_text",
+        alias = "translatedText"
+    )]
     pub text: String,
 }
 

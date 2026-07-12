@@ -12,7 +12,7 @@ pub struct OpenAiCompatibleProvider {
     user_id: Option<String>,
 }
 
-const TRANSLATION_SYSTEM_PROMPT: &str = "You are a game localization translator. Translate every segment into the requested target language, preserve every <ph> tag exactly, and return only a JSON object with a translations array containing the original ids and translated text.";
+const TRANSLATION_SYSTEM_PROMPT: &str = r#"You are a game localization translator. Translate every segment into the requested target language and preserve every <ph> tag exactly. Return only this exact JSON shape: {"translations":[{"id":"0","text":"translated text"}]}. Every input id must appear exactly once. The translation field must be named "text"; never use translated, translated_text, or translatedText."#;
 
 impl OpenAiCompatibleProvider {
     #[must_use]

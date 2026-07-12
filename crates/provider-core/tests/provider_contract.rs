@@ -123,3 +123,20 @@ fn deepseek_requests_use_a_stable_system_prefix_and_user_isolation() {
     assert_eq!(json["messages"][1]["role"], "user");
     assert_eq!(json["user_id"], "game-translator-desktop");
 }
+
+#[test]
+fn accepts_common_deepseek_translation_text_aliases() {
+    for field in ["translated", "translated_text", "translatedText"] {
+        let content =
+            format!(r#"{{\"translations\":[{{\"id\":\"segment-1\",\"{field}\":\"月光石\"}}]}}"#);
+        let body = format!(r#"{{"choices":[{{"message":{{"content":"{content}"}}}}]}}"#);
+        let provider = OpenAiCompatibleProvider::new(
+            mock_server(200, Box::leak(body.into_boxed_str())),
+            "key",
+        );
+
+        let response = provider.translate(&request()).unwrap();
+
+        assert_eq!(response.translations[0].text, "月光石");
+    }
+}

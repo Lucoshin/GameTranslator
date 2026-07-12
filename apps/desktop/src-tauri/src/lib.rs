@@ -753,6 +753,80 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "uses the saved DeepSeek credential and incurs API usage"]
+    fn benchmarks_saved_deepseek_configuration() {
+        use game_translator_app_core::{CredentialStore, WindowsCredentialStore};
+        use game_translator_provider_core::{
+            OpenAiCompatibleProvider, TranslationInput, TranslationProvider, TranslationRequest,
+        };
+        use std::time::Instant;
+
+        let root = std::env::var_os("GAME_TRANSLATOR_RENPY_FIXTURE")
+            .map(PathBuf::from)
+            .expect("set GAME_TRANSLATOR_RENPY_FIXTURE");
+        let project = super::detect_game(&root).unwrap();
+        let segments = super::extract_game(&project).unwrap();
+        let api_key = WindowsCredentialStore::new("GameTranslator")
+            .get("default-provider")
+            .unwrap()
+            .expect("save a DeepSeek API key first");
+        let provider = OpenAiCompatibleProvider::new("https://api.deepseek.com", api_key)
+            .with_user_id("game-translator-benchmark");
+        let request = TranslationRequest {
+            model: "deepseek-v4-flash".into(),
+            source_language: "Auto-detect the source language".into(),
+            target_language: "简体中文 (zh-CN)".into(),
+            segments: segments
+                .iter()
+                .take(16)
+                .enumerate()
+                .map(|(index, segment)| TranslationInput {
+                    id: index.to_string(),
+                    text: super::protect_placeholders(&segment.source).text,
+                })
+                .collect(),
+        };
+
+        let started = Instant::now();
+        let response = provider.translate(&request).unwrap();
+        let elapsed = started.elapsed();
+
+        eprintln!(
+            "DEEPSEEK_BENCHMARK segments={} elapsed_ms={} segments_per_second={:.2}",
+            response.translations.len(),
+            elapsed.as_millis(),
+            f64::from(u32::try_from(response.translations.len()).unwrap()) / elapsed.as_secs_f64()
+        );
+        assert_eq!(response.translations.len(), request.segments.len());
+
+        let concurrent_request = TranslationRequest {
+            segments: request.segments[..8].to_vec(),
+            ..request
+        };
+        let concurrent_started = Instant::now();
+        let translated = std::thread::scope(|scope| {
+            let handles = (0..8)
+                .map(|_| {
+                    let request = concurrent_request.clone();
+                    let provider = &provider;
+                    scope.spawn(move || provider.translate(&request).unwrap().translations.len())
+                })
+                .collect::<Vec<_>>();
+            handles
+                .into_iter()
+                .map(|handle| handle.join().unwrap())
+                .sum::<usize>()
+        });
+        let concurrent_elapsed = concurrent_started.elapsed();
+        eprintln!(
+            "DEEPSEEK_CONCURRENT_BENCHMARK requests=8 segments={} elapsed_ms={} segments_per_second={:.2}",
+            translated,
+            concurrent_elapsed.as_millis(),
+            f64::from(u32::try_from(translated).unwrap()) / concurrent_elapsed.as_secs_f64()
+        );
+    }
+
+    #[test]
     fn scans_a_real_rpg_maker_fixture() {
         let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../../fixtures/rpgmaker-mz-dialogue");
