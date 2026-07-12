@@ -62,7 +62,7 @@ impl fmt::Display for ProviderError {
 
 impl Error for ProviderError {}
 
-pub trait TranslationProvider {
+pub trait TranslationProvider: Send + Sync {
     /// Translates one structured batch.
     ///
     /// # Errors

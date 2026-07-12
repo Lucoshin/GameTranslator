@@ -19,9 +19,7 @@ pub fn extract_templates(project: &DetectedProject) -> Result<Vec<Segment>, Engi
 /// Returns an engine error when generation, reading, or cleanup fails.
 pub fn extract_project(project: &DetectedProject) -> Result<Vec<Segment>, EngineError> {
     let template_root = crate::generate_templates(project)?;
-    let result = extract_from(project, &template_root);
-    let _ = fs::remove_dir_all(template_root);
-    result
+    extract_from(project, &template_root)
 }
 
 fn extract_from(

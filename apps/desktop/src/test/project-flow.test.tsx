@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() => undefined) }));
 
 beforeEach(() => {
   vi.mocked(invoke).mockReset();
@@ -49,6 +50,7 @@ describe("project flow", () => {
           target: "终于到了。 \\V[1]",
           speaker: "アリス",
           sourceFile: "D:\\Games\\RealGame\\data\\Map001.json",
+          qa: "passed",
         }],
         warningFindings: 0,
         blockingFindings: 0,
@@ -106,7 +108,7 @@ describe("project flow", () => {
 
     expect(screen.getByRole("heading", { name: "月影神殿" })).toBeVisible();
     expect(screen.getByText("演示数据，不会读取或修改本地文件")).toBeVisible();
-    expect(screen.getByText("RPG Maker MZ")).toBeVisible();
+    expect(screen.getAllByText("RPG Maker MZ")[0]).toBeVisible();
   });
 
   it("configures a model before starting translation", async () => {

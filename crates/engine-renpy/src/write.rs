@@ -19,9 +19,7 @@ pub fn write_translations<S: BuildHasher>(
 ) -> Result<Vec<PathBuf>, EngineError> {
     let templates = crate::generate_templates(project)?;
     let target_root = output_root.join("game/tl").join(language);
-    let result = rewrite_tree(&templates, &templates, &target_root, translations, language);
-    let _ = fs::remove_dir_all(templates);
-    result
+    rewrite_tree(&templates, &templates, &target_root, translations, language)
 }
 
 fn rewrite_tree<S: BuildHasher>(

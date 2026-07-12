@@ -15,8 +15,8 @@ export function ProjectOverview({ project, configured, onConfigure, onStart }: {
 
       <section className="stat-grid">
         <Stat value={project.segmentCount.toLocaleString()} label="可翻译文本" note="已按安全白名单提取" />
-        <Stat value={project.demo ? "≈ 38K" : "待计算"} label="预计 Token" note={project.demo ? "按当前场景批次估算" : "开始翻译前由模型配置计算"} />
-        <Stat value={project.demo ? "94%" : "白名单"} label="结构覆盖" note={project.demo ? "发现 2 个插件动态文本" : "未分析插件动态文本"} warning />
+        <Stat value={project.engine} label="识别引擎" note="已选择对应引擎适配器" />
+        <Stat value="只读" label="源项目策略" note="翻译补丁写入独立目录" />
       </section>
 
       <div className="overview-grid">
@@ -30,7 +30,7 @@ export function ProjectOverview({ project, configured, onConfigure, onStart }: {
           <div className="check-row ok"><span>✓</span><div><b>源文件只读</b><small>将在独立工作目录处理</small></div></div>
           <div className={configured ? "check-row ok" : "check-row"}><span>{configured ? "✓" : "!"}</span><div><b>{configured ? "模型已配置" : "模型尚未配置"}</b><small>支持 OpenAI-compatible / Ollama</small></div></div>
           <button className="secondary-action" onClick={onConfigure}>配置模型</button>
-          <button className="primary-action full" aria-label="开始汉化" onClick={onStart}>开始汉化 <span>→</span></button>
+          <button className="primary-action full" aria-label="开始汉化" onClick={onStart}>开始翻译 <span>→</span></button>
         </section>
       </div>
     </div>

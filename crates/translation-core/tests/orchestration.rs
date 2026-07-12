@@ -149,3 +149,24 @@ fn retries_a_rate_limited_request_before_failing_it() {
     assert_eq!(result.translations.get("a").unwrap(), "重试成功");
     assert_eq!(provider.calls.load(Ordering::SeqCst), 2);
 }
+
+#[test]
+fn reports_real_progress_after_each_completed_batch() {
+    let provider = FakeProvider {
+        calls: Mutex::new(Vec::new()),
+        fail_large_batches: false,
+    };
+    let orchestrator = TranslationOrchestrator::new(&provider, "model", "auto", "zh-CN", 2);
+    let segments = segments();
+    let mut completed = Vec::new();
+
+    let result = orchestrator.run_with_progress(
+        &segments,
+        &HashMap::new(),
+        RunControl::Running,
+        |progress| completed.push(progress.translations.len()),
+    );
+
+    assert_eq!(result.translations.len(), 3);
+    assert_eq!(completed, vec![2, 3]);
+}

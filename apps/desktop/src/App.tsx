@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { ExportPanel } from "./features/export/ExportPanel";
 import { ProjectHome } from "./features/projects/ProjectHome";
 import { ProjectOverview, type ProjectSummary } from "./features/projects/ProjectOverview";
@@ -10,13 +11,17 @@ import { LanguageSettings, type Language } from "./features/translation/Language
 import "./styles/global.css";
 
 type View = "overview" | "translation" | "review" | "export";
-export type TranslationItem = { id: string; source: string; target: string; speaker: string | null; sourceFile: string };
+export type TranslationItem = { id: string; source: string; target: string; speaker: string | null; sourceFile: string; qa: "passed" | "warning" | "blocking" };
 export type TranslationRun = { items: TranslationItem[]; warningFindings: number; blockingFindings: number; failedSegmentIds: string[] };
+export type TranslationProgressState = { phase: "idle" | "extracting" | "translating" | "qa" | "completed" | "failed"; completed: number; total: number; failed: number; warningFindings: number; blockingFindings: number; message: string };
+export type TranslationLog = { time: string; message: string };
+type TranslationProgressEvent = TranslationProgressState & { runId: string };
 type ExportResult = { outputPath: string; fileCount: number };
 
 export default function App() {
   const [project, setProject] = useState<ProjectSummary | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
   const [view, setView] = useState<View>("overview");
   const [providerOpen, setProviderOpen] = useState(false);
   const [provider, setProvider] = useState<ProviderConfiguration | null>(null);
@@ -25,6 +30,8 @@ export default function App() {
   const [translation, setTranslation] = useState<TranslationRun | null>(null);
   const [translationError, setTranslationError] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
+  const [progress, setProgress] = useState<TranslationProgressState | null>(null);
+  const [translationLogs, setTranslationLogs] = useState<TranslationLog[]>([]);
   const [exportResult, setExportResult] = useState<ExportResult | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -33,11 +40,14 @@ export default function App() {
     return (
       <ProjectHome
         error={openError}
+        scanning={scanning}
         onSelect={() => {
           setOpenError(null);
+          setScanning(true);
           void invoke<Omit<ProjectSummary, "demo">>("select_and_scan_project")
             .then((result) => setProject({ ...result, demo: false }))
-            .catch((error: unknown) => setOpenError(String(error)));
+            .catch((error: unknown) => setOpenError(String(error)))
+            .finally(() => setScanning(false));
         }}
         onOpenDemo={() => setProject({
           projectPath: "D:\\Games\\Moonlit Shrine",
@@ -60,19 +70,53 @@ export default function App() {
       return;
     }
     setTranslationError(null);
+    setTranslation(null);
     setTranslating(true);
     setView("translation");
-    void invoke<TranslationRun>("translate_project", {
-      input: {
-        projectPath: project.projectPath,
-        provider: { ...provider, apiKey: null },
-        sourceLanguage,
-        targetLanguage,
-      },
-    })
-      .then(setTranslation)
-      .catch((error: unknown) => setTranslationError(String(error)))
-      .finally(() => setTranslating(false));
+    const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const initial: TranslationProgressState = { phase: "extracting", completed: 0, total: 0, failed: 0, warningFindings: 0, blockingFindings: 0, message: "正在准备翻译任务" };
+    setProgress(initial);
+    setTranslationLogs([{ time: currentTime(), message: initial.message }]);
+    void (async () => {
+      const unlisten = await listen<TranslationProgressEvent>("translation-progress", ({ payload }) => {
+        if (payload.runId !== runId) return;
+        setProgress(payload);
+        setTranslationLogs((current) => [...current.slice(-99), { time: currentTime(), message: payload.message }]);
+      });
+      try {
+        const result = await invoke<TranslationRun>("translate_project", {
+          input: {
+            runId,
+            projectPath: project.projectPath,
+            provider: { ...provider, apiKey: null },
+            sourceLanguage,
+            targetLanguage,
+          },
+        });
+        setTranslation(result);
+        setProgress((current) => {
+          const total = current?.total || result.items.length;
+          return {
+            phase: "completed",
+            completed: total,
+            total,
+            failed: result.failedSegmentIds.length,
+            warningFindings: result.warningFindings,
+            blockingFindings: result.blockingFindings,
+            message: "任务完成，可以校对或导出",
+          };
+        });
+        setTranslationLogs((current) => current.at(-1)?.message === "任务完成，可以校对或导出" ? current : [...current, { time: currentTime(), message: "任务完成，可以校对或导出" }]);
+      } catch (error) {
+        const message = String(error);
+        setTranslationError(message);
+        setProgress((current) => ({ ...(current ?? initial), phase: "failed", message }));
+        setTranslationLogs((current) => [...current, { time: currentTime(), message: `任务失败：${message}` }]);
+      } finally {
+        unlisten();
+        setTranslating(false);
+      }
+    })();
   };
 
   const exportPatch = () => {
@@ -136,6 +180,8 @@ export default function App() {
               demo={project.demo}
               loading={translating}
               error={translationError}
+              progress={progress}
+              logs={translationLogs}
               onReview={() => setView("review")}
               onExport={() => setView("export")}
             />
@@ -149,6 +195,7 @@ export default function App() {
               } : current)}
               onExport={() => setView("export")}
               targetLanguage={targetLanguage}
+              sourceLanguage={sourceLanguage}
             />
           ) : null}
           {view === "export" ? (
@@ -180,6 +227,10 @@ export default function App() {
       />
     </div>
   );
+}
+
+function currentTime() {
+  return new Date().toLocaleTimeString("zh-CN", { hour12: false });
 }
 
 function RailButton({

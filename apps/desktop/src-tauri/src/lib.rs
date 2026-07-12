@@ -3,15 +3,19 @@ use std::{collections::HashMap, path::Path, path::PathBuf};
 use game_translator_app_core::{
     detect_game, engine_name, extract_game, CredentialStore, PatchPlan, WindowsCredentialStore,
 };
+use game_translator_engine_core::Segment;
 use game_translator_provider_core::{
     OllamaProvider, OpenAiCompatibleProvider, TranslationProvider,
 };
 use game_translator_qa_core::{
-    check_translation, protect_placeholders, restore_placeholders, validate_control_codes, QaCode,
-    QaFinding, QaSeverity,
+    check_translation, protect_placeholders, restore_placeholders, validate_control_codes,
+    ProtectedText, QaCode, QaFinding, QaSeverity,
 };
-use game_translator_translation_core::{RunControl, TranslationOrchestrator, TranslationSegment};
+use game_translator_translation_core::{
+    RunControl, RunResult, TranslationOrchestrator, TranslationSegment,
+};
 use serde::{Deserialize, Serialize};
+use tauri::Emitter;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,10 +38,24 @@ struct ProviderInput {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct TranslateCommandInput {
+    run_id: String,
     project_path: String,
     provider: ProviderInput,
     source_language: LanguageInput,
     target_language: LanguageInput,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TranslationProgressEvent {
+    run_id: String,
+    phase: String,
+    completed: usize,
+    total: usize,
+    failed: usize,
+    warning_findings: usize,
+    blocking_findings: usize,
+    message: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -55,6 +73,7 @@ struct TranslationItem {
     target: String,
     speaker: Option<String>,
     source_file: String,
+    qa: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -127,8 +146,21 @@ fn save_provider_configuration(provider: ProviderInput) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn translate_project(input: TranslateCommandInput) -> Result<TranslationRunResult, String> {
+async fn translate_project(
+    app: tauri::AppHandle,
+    input: TranslateCommandInput,
+) -> Result<TranslationRunResult, String> {
+    tauri::async_runtime::spawn_blocking(move || translate_command(&app, input))
+        .await
+        .map_err(|error| format!("翻译任务异常终止: {error}"))?
+}
+
+fn translate_command(
+    app: &tauri::AppHandle,
+    input: TranslateCommandInput,
+) -> Result<TranslationRunResult, String> {
     let TranslateCommandInput {
+        run_id,
         project_path,
         source_language,
         target_language,
@@ -140,6 +172,17 @@ fn translate_project(input: TranslateCommandInput) -> Result<TranslationRunResul
                 api_key: _,
             },
     } = input;
+    emit_progress(
+        app,
+        &run_id,
+        "extracting",
+        0,
+        0,
+        0,
+        0,
+        0,
+        "正在提取游戏文本",
+    );
     let provider: Box<dyn TranslationProvider> = if kind == "ollama" {
         Box::new(OllamaProvider::new(&base_url))
     } else {
@@ -150,13 +193,45 @@ fn translate_project(input: TranslateCommandInput) -> Result<TranslationRunResul
             .ok_or_else(|| "尚未保存 API Key".to_owned())?;
         Box::new(OpenAiCompatibleProvider::new(&base_url, api_key))
     };
-    translate_path_with_provider(
+    translate_path_with_provider_and_progress(
         Path::new(&project_path),
         provider.as_ref(),
         &model,
         &language_prompt(&source_language),
         &language_prompt(&target_language),
+        |phase, completed, total, failed, warnings, blocking, message| {
+            emit_progress(
+                app, &run_id, phase, completed, total, failed, warnings, blocking, message,
+            );
+        },
     )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn emit_progress(
+    app: &tauri::AppHandle,
+    run_id: &str,
+    phase: &str,
+    completed: usize,
+    total: usize,
+    failed: usize,
+    warning_findings: usize,
+    blocking_findings: usize,
+    message: &str,
+) {
+    let _ = app.emit(
+        "translation-progress",
+        TranslationProgressEvent {
+            run_id: run_id.to_owned(),
+            phase: phase.to_owned(),
+            completed,
+            total,
+            failed,
+            warning_findings,
+            blocking_findings,
+            message: message.to_owned(),
+        },
+    );
 }
 
 fn language_prompt(language: &LanguageInput) -> String {
@@ -167,6 +242,7 @@ fn language_prompt(language: &LanguageInput) -> String {
     }
 }
 
+#[cfg(test)]
 fn translate_path_with_provider(
     path: &Path,
     provider: &dyn TranslationProvider,
@@ -174,8 +250,39 @@ fn translate_path_with_provider(
     source_language: &str,
     target_language: &str,
 ) -> Result<TranslationRunResult, String> {
+    translate_path_with_provider_and_progress(
+        path,
+        provider,
+        model,
+        source_language,
+        target_language,
+        |_, _, _, _, _, _, _| {},
+    )
+}
+
+fn translate_path_with_provider_and_progress<F>(
+    path: &Path,
+    provider: &dyn TranslationProvider,
+    model: &str,
+    source_language: &str,
+    target_language: &str,
+    mut progress: F,
+) -> Result<TranslationRunResult, String>
+where
+    F: FnMut(&str, usize, usize, usize, usize, usize, &str),
+{
     let project = detect_game(path).map_err(|error| error.to_string())?;
     let segments = extract_game(&project).map_err(|error| error.to_string())?;
+    let total = segments.len();
+    progress(
+        "translating",
+        0,
+        total,
+        0,
+        0,
+        0,
+        "文本提取完成，正在请求模型",
+    );
     let mut protected = HashMap::new();
     let translation_segments = segments
         .iter()
@@ -187,13 +294,68 @@ fn translate_path_with_provider(
         })
         .collect::<Vec<_>>();
     let orchestrator =
-        TranslationOrchestrator::new(provider, model, source_language, target_language, 20);
-    let run = orchestrator.run(&translation_segments, &HashMap::new(), RunControl::Running);
+        TranslationOrchestrator::new(provider, model, source_language, target_language, 32);
+    let run = orchestrator.run_with_progress(
+        &translation_segments,
+        &HashMap::new(),
+        RunControl::Running,
+        |current| {
+            let completed = current.translations.len() + current.failed_segment_ids.len();
+            progress(
+                "translating",
+                completed,
+                total,
+                current.failed_segment_ids.len(),
+                0,
+                0,
+                &format!("模型已处理 {completed} / {total} 个片段"),
+            );
+        },
+    );
+    progress(
+        "qa",
+        0,
+        total,
+        run.failed_segment_ids.len(),
+        0,
+        0,
+        "模型翻译结束，正在执行质量检查",
+    );
+    let (items, warning_findings, blocking_findings) =
+        restore_and_check(segments, &run, &protected, &mut progress)?;
+
+    progress(
+        "completed",
+        total,
+        total,
+        run.failed_segment_ids.len(),
+        warning_findings,
+        blocking_findings,
+        "任务完成，可以校对或导出",
+    );
+
+    Ok(TranslationRunResult {
+        items,
+        warning_findings,
+        blocking_findings,
+        failed_segment_ids: run.failed_segment_ids,
+    })
+}
+
+fn restore_and_check<F>(
+    segments: Vec<Segment>,
+    run: &RunResult,
+    protected: &HashMap<String, ProtectedText>,
+    progress: &mut F,
+) -> Result<(Vec<TranslationItem>, usize, usize), String>
+where
+    F: FnMut(&str, usize, usize, usize, usize, usize, &str),
+{
+    let total = segments.len();
     let mut items = Vec::with_capacity(run.translations.len());
     let mut warning_findings = 0;
     let mut blocking_findings = 0;
-
-    for segment in segments {
+    for (index, segment) in segments.into_iter().enumerate() {
         let Some(translated) = run.translations.get(&segment.id) else {
             continue;
         };
@@ -204,10 +366,20 @@ fn translate_path_with_provider(
             translated,
         )
         .map_err(|error| format!("{}: {error}", segment.id))?;
-        for finding in check_translation(&segment.source, &target, None) {
+        let findings = check_translation(&segment.source, &target, None);
+        let mut item_qa = "passed";
+        for finding in findings {
             match finding.severity {
-                QaSeverity::Blocking => blocking_findings += 1,
-                QaSeverity::Warning => warning_findings += 1,
+                QaSeverity::Blocking => {
+                    blocking_findings += 1;
+                    item_qa = "blocking";
+                }
+                QaSeverity::Warning => {
+                    warning_findings += 1;
+                    if item_qa == "passed" {
+                        item_qa = "warning";
+                    }
+                }
             }
         }
         items.push(TranslationItem {
@@ -216,15 +388,23 @@ fn translate_path_with_provider(
             target,
             speaker: segment.context.speaker,
             source_file: segment.source_file.to_string_lossy().into_owned(),
+            qa: item_qa.to_owned(),
         });
+        let checked = index + 1;
+        if checked == total || checked % 50 == 0 {
+            progress(
+                "qa",
+                checked,
+                total,
+                run.failed_segment_ids.len(),
+                warning_findings,
+                blocking_findings,
+                &format!("质量检查 {checked} / {total}"),
+            );
+        }
     }
 
-    Ok(TranslationRunResult {
-        items,
-        warning_findings,
-        blocking_findings,
-        failed_segment_ids: run.failed_segment_ids,
-    })
+    Ok((items, warning_findings, blocking_findings))
 }
 
 #[tauri::command]

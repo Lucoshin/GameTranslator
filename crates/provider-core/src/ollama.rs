@@ -35,6 +35,7 @@ impl TranslationProvider for OllamaProvider {
         let response = self
             .client
             .post(format!("{}/api/chat", self.base_url))
+            .timeout(std::time::Duration::from_secs(120))
             .json(&OllamaRequest {
                 model: &request.model,
                 stream: false,

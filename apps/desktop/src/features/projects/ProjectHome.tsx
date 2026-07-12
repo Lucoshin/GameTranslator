@@ -1,4 +1,4 @@
-export function ProjectHome({ onSelect, onOpenDemo, error }: { onSelect: () => void; onOpenDemo: () => void; error: string | null }) {
+export function ProjectHome({ onSelect, onOpenDemo, error, scanning }: { onSelect: () => void; onOpenDemo: () => void; error: string | null; scanning: boolean }) {
   return (
     <main className="home-screen">
       <div className="paper-grain" />
@@ -15,16 +15,16 @@ export function ProjectHome({ onSelect, onOpenDemo, error }: { onSelect: () => v
           <p className="kicker">游戏文本，本地处理</p>
           <h1>让另一种语言，<br /><em>住进同一个世界。</em></h1>
           <p className="hero-lead">
-            为 RPG Maker MV / MZ 打造的一键汉化工作台。你持有模型密钥，原始游戏保持不变。
+            支持 RPG Maker MV / MZ 与 Ren'Py 的游戏翻译工作台。你持有模型密钥，原始游戏保持不变。
           </p>
           <div className="hero-actions">
-            <button className="primary-action" aria-label="选择游戏目录" onClick={onSelect}>
-              选择游戏目录 <span>↗</span>
+            <button className="primary-action" aria-label="选择游戏目录" disabled={scanning} onClick={onSelect}>
+              {scanning ? "正在识别并提取文本…" : "选择游戏目录"} <span>↗</span>
             </button>
             <button className="ghost-action" onClick={onOpenDemo}>载入演示项目</button>
           </div>
           {error ? <p className="home-error" role="alert">{error}</p> : null}
-          <p className="availability">首版支持未加密 RPG Maker MV / MZ 项目</p>
+          <p className="availability">支持 RPG Maker MV / MZ 与 Ren'Py 8.x 发行版</p>
         </div>
 
         <div className="hero-art" aria-hidden="true">

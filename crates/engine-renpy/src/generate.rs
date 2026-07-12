@@ -1,5 +1,7 @@
 use std::{
+    collections::hash_map::DefaultHasher,
     fs,
+    hash::{Hash, Hasher},
     path::{Path, PathBuf},
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
@@ -21,6 +23,11 @@ const PLUGIN: &str = r"init -999 python:
 /// # Errors
 /// Returns an engine error when the launcher fails, templates cannot be copied, or cleanup fails.
 pub fn generate_templates(project: &DetectedProject) -> Result<PathBuf, EngineError> {
+    if let Some(cache) = template_cache(project)? {
+        if cache.is_dir() {
+            return Ok(cache);
+        }
+    }
     let token = format!("_gametranslator_{}_{}", std::process::id(), timestamp());
     let plugin = project.data_dir.join(format!("{token}.rpy"));
     let compiled_plugin = project.data_dir.join(format!("{token}.rpyc"));
@@ -34,8 +41,21 @@ pub fn generate_templates(project: &DetectedProject) -> Result<PathBuf, EngineEr
     }
 
     fs::write(&plugin, PLUGIN).map_err(|error| io_error(&plugin, error))?;
-    let result = run_generator(project, &token)
-        .and_then(|()| copy_tree(&generated, &temporary).map(|()| temporary.clone()));
+    let result = run_generator(project, &token).and_then(|()| {
+        copy_tree(&generated, &temporary)?;
+        if let Some(cache) = template_cache(project)? {
+            if let Some(parent) = cache.parent() {
+                fs::create_dir_all(parent).map_err(|error| io_error(parent, error))?;
+            }
+            if cache.exists() {
+                fs::remove_dir_all(&cache).map_err(|error| io_error(&cache, error))?;
+            }
+            fs::rename(&temporary, &cache).map_err(|error| io_error(&cache, error))?;
+            Ok(cache)
+        } else {
+            Ok(temporary.clone())
+        }
+    });
     let cleanup_result = cleanup(&plugin, &compiled_plugin, &generated);
     match (result, cleanup_result) {
         (Ok(path), Ok(())) => Ok(path),
@@ -44,6 +64,33 @@ pub fn generate_templates(project: &DetectedProject) -> Result<PathBuf, EngineEr
             Err(error)
         }
     }
+}
+
+fn template_cache(project: &DetectedProject) -> Result<Option<PathBuf>, EngineError> {
+    let archive = fs::read_dir(&project.data_dir)
+        .map_err(|error| io_error(&project.data_dir, error))?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|path| {
+            path.extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("rpa"))
+        });
+    let archive = archive.unwrap_or_else(|| project.data_dir.clone());
+    let metadata = fs::metadata(&archive).map_err(|error| io_error(&archive, error))?;
+    let modified = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map_or(0, |duration| duration.as_secs());
+    let mut hasher = DefaultHasher::new();
+    project.root.hash(&mut hasher);
+    metadata.len().hash(&mut hasher);
+    modified.hash(&mut hasher);
+    Ok(Some(
+        std::env::temp_dir()
+            .join("GameTranslator/renpy-templates")
+            .join(format!("{:016x}", hasher.finish())),
+    ))
 }
 
 fn run_generator(project: &DetectedProject, token: &str) -> Result<(), EngineError> {

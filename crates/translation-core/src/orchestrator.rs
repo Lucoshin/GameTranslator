@@ -59,6 +59,20 @@ impl<'a> TranslationOrchestrator<'a> {
         cached: &HashMap<String, String>,
         control: RunControl,
     ) -> RunResult {
+        self.run_with_progress(segments, cached, control, |_| {})
+    }
+
+    #[must_use]
+    pub fn run_with_progress<F>(
+        &self,
+        segments: &[TranslationSegment],
+        cached: &HashMap<String, String>,
+        control: RunControl,
+        mut on_progress: F,
+    ) -> RunResult
+    where
+        F: FnMut(&RunResult),
+    {
         let mut result = RunResult {
             status: RunStatus::Completed,
             translations: cached.clone(),
@@ -75,7 +89,7 @@ impl<'a> TranslationOrchestrator<'a> {
             .cloned()
             .collect::<Vec<_>>();
         for batch in build_batches(&pending, self.maximum_batch_size) {
-            self.translate_with_split(&batch, &mut result);
+            self.translate_with_split(&batch, &mut result, &mut on_progress);
         }
         if !result.failed_segment_ids.is_empty() {
             result.status = RunStatus::CompletedWithFailures;
@@ -83,7 +97,14 @@ impl<'a> TranslationOrchestrator<'a> {
         result
     }
 
-    fn translate_with_split(&self, batch: &[TranslationSegment], result: &mut RunResult) {
+    fn translate_with_split<F>(
+        &self,
+        batch: &[TranslationSegment],
+        result: &mut RunResult,
+        on_progress: &mut F,
+    ) where
+        F: FnMut(&RunResult),
+    {
         match self.translate_batch(batch) {
             Ok(response) if response_matches(batch, &response) => {
                 result.translations.extend(
@@ -92,15 +113,19 @@ impl<'a> TranslationOrchestrator<'a> {
                         .into_iter()
                         .map(|translation| (translation.id, translation.text)),
                 );
+                on_progress(result);
             }
             Ok(_) | Err(_) if batch.len() > 1 => {
                 let midpoint = batch.len() / 2;
-                self.translate_with_split(&batch[..midpoint], result);
-                self.translate_with_split(&batch[midpoint..], result);
+                self.translate_with_split(&batch[..midpoint], result, on_progress);
+                self.translate_with_split(&batch[midpoint..], result, on_progress);
             }
-            Ok(_) | Err(_) => result
-                .failed_segment_ids
-                .extend(batch.iter().map(|segment| segment.id.clone())),
+            Ok(_) | Err(_) => {
+                result
+                    .failed_segment_ids
+                    .extend(batch.iter().map(|segment| segment.id.clone()));
+                on_progress(result);
+            }
         }
     }
 

@@ -37,6 +37,7 @@ impl TranslationProvider for OpenAiCompatibleProvider {
         let response = self
             .client
             .post(format!("{}/chat/completions", self.base_url))
+            .timeout(std::time::Duration::from_secs(120))
             .bearer_auth(&self.api_key)
             .json(&OpenAiRequest {
                 model: &request.model,
