@@ -1250,6 +1250,7 @@ dependencies = [
  "game-translator-engine-core",
  "game-translator-engine-renpy",
  "game-translator-engine-rpgmaker",
+ "game-translator-provider-core",
  "game-translator-qa-core",
  "keyring",
  "serde",

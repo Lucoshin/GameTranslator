@@ -9,14 +9,13 @@ import { PatchHistory, type PatchHistoryEntry } from "./features/history/PatchHi
 import { SegmentTable } from "./features/review/SegmentTable";
 import { TranslationProgress } from "./features/translation/TranslationProgress";
 import { LanguageSettings, type Language } from "./features/translation/LanguageSettings";
+import { applicationErrorMessage } from "./api/errors";
+import type { ResumableTask, TranslationItem, TranslationProgressEvent, TranslationProgressState, TranslationRun } from "./api/contracts";
 import "./styles/global.css";
 
 type View = "overview" | "translation" | "review" | "export" | "history";
-export type TranslationItem = { id: string; source: string; target: string; speaker: string | null; sourceFile: string; qa: "passed" | "warning" | "blocking" };
-export type TranslationRun = { items: TranslationItem[]; warningFindings: number; blockingFindings: number; failedSegmentIds: string[] };
-export type TranslationProgressState = { phase: "idle" | "extracting" | "translating" | "qa" | "completed" | "failed"; completed: number; total: number; failed: number; warningFindings: number; blockingFindings: number; message: string; concurrency?: number; throughput?: number; etaSeconds?: number };
+export type { TranslationItem, TranslationRun, TranslationProgressState } from "./api/contracts";
 export type TranslationLog = { time: string; message: string };
-type TranslationProgressEvent = TranslationProgressState & { runId: string };
 type ExportResult = { outputPath: string; fileCount: number };
 type InstallResult = { installedPath: string; fileCount: number };
 type UninstallResult = { restoredFileCount: number; removedFileCount: number };
@@ -54,9 +53,18 @@ export default function App() {
   const [deletingHistoryId, setDeletingHistoryId] = useState<string | null>(null);
 
   useEffect(() => {
+    void invoke<ResumableTask[]>("list_resumable_tasks")
+      .then((tasks) => {
+        const latest = tasks.at(0);
+        if (!latest) return;
+        setPersistenceError(`检测到未完成任务（${latest.completed}/${latest.total}），再次开始翻译将从缓存继续`);
+        return invoke<ProjectSummary>("scan_project_path", { projectPath: latest.projectPath })
+          .then((restored) => { setProject(restored); setOverviewOpen(true); });
+      })
+      .catch((error: unknown) => setPersistenceError(`读取恢复任务失败：${applicationErrorMessage(error)}`));
     void invoke<ProviderConfiguration | null>("load_provider_configuration")
       .then((stored) => { if (stored) setProvider(stored); })
-      .catch((error: unknown) => setPersistenceError(`读取模型配置失败：${String(error)}`));
+      .catch((error: unknown) => setPersistenceError(`读取模型配置失败：${applicationErrorMessage(error)}`));
     void invoke<DesktopPreferences>("load_desktop_preferences")
       .then((preferences) => {
         if (!preferences) return;
@@ -68,9 +76,9 @@ export default function App() {
             setProject(restored);
             setOverviewOpen(true);
           })
-          .catch((error: unknown) => setPersistenceError(`无法恢复最近项目：${String(error)}`));
+          .catch((error: unknown) => setPersistenceError(`无法恢复最近项目：${applicationErrorMessage(error)}`));
       })
-      .catch((error: unknown) => setPersistenceError(`读取应用偏好失败：${String(error)}`));
+      .catch((error: unknown) => setPersistenceError(`读取应用偏好失败：${applicationErrorMessage(error)}`));
   }, []);
 
   const savePreferences = (recentProjectPath: string | null, source = sourceLanguage, target = targetLanguage) => {

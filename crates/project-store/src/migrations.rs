@@ -49,6 +49,19 @@ pub(crate) fn migrate(connection: &Connection) -> Result<(), StoreError> {
             source TEXT NOT NULL,
             target TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS translation_tasks (
+            id TEXT PRIMARY KEY,
+            project_path TEXT NOT NULL,
+            state TEXT NOT NULL CHECK (
+                state IN ('pending', 'running', 'paused', 'completed', 'failed', 'cancelled')
+            ),
+            total INTEGER NOT NULL,
+            completed INTEGER NOT NULL,
+            failed INTEGER NOT NULL,
+            snapshot TEXT,
+            updated_at_unix_ms INTEGER NOT NULL
+        );
         ",
     )?;
     Ok(())
