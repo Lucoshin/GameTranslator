@@ -392,14 +392,14 @@ fn read_export_history(
     if let Some(project_id) = project_id {
         history.retain(|record| record.project_id == project_id);
     }
-    history.sort_by(|left, right| right.exported_at_unix_ms.cmp(&left.exported_at_unix_ms));
+    history.sort_by_key(|record| std::cmp::Reverse(record.exported_at_unix_ms));
     Ok(history)
 }
 
 fn append_export_history(path: &Path, record: BookExportRecord) -> Result<(), String> {
     let mut history = read_export_history(path, None)?;
     history.push(record);
-    history.sort_by(|left, right| right.exported_at_unix_ms.cmp(&left.exported_at_unix_ms));
+    history.sort_by_key(|record| std::cmp::Reverse(record.exported_at_unix_ms));
     if history.len() > 200 {
         history.truncate(200);
     }
