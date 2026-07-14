@@ -15,14 +15,16 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <nav aria-label="产品导航">
-        <button type="button" aria-label="GameTranslator 首页" onClick={() => setView('projects')}>译</button>
+      <nav aria-label="产品导航" className="product-nav">
+        <button type="button" className="brand-button" aria-label="GameTranslator 首页" onClick={() => setView('projects')}><span>译</span></button>
         {productNav.map(([icon, label]) => (
-          <button type="button" key={label} onClick={() => label === '项目' && setView('projects')}>
+          <button type="button" className={label === '项目' ? 'active' : ''} key={label} onClick={() => label === '项目' && setView('projects')}>
             <Icon name={icon} />
             <span>{label}</span>
           </button>
         ))}
+        <div className="nav-spacer" />
+        <button type="button" className="nav-avatar" aria-label="当前用户">L</button>
       </nav>
       {view === 'projects'
         ? <ProjectCenter onOpenBook={() => setView('book')} />
