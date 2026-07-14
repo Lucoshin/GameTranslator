@@ -20,6 +20,8 @@ button { color: inherit; }
 .hero h1 em { color: var(--vermillion); font-style: normal; }
 .hero-lead { max-width: 540px; margin: 28px 0; color: var(--ink-soft); font-size: 16px; line-height: 1.9; }
 .hero-actions, .progress-actions { display: flex; gap: 12px; align-items: center; }
+.book-entry-action { min-height: 48px; background: rgba(251,250,246,.58); }
+.book-entry-action span { margin-left: 12px; }
 .primary-action, .secondary-action, .ghost-action, .text-button { border: 0; cursor: pointer; transition: transform .2s, background .2s, color .2s; }
 .primary-action { min-height: 48px; padding: 0 22px; background: var(--ink); color: var(--white); font-weight: 700; box-shadow: 5px 5px 0 var(--vermillion); }
 .primary-action:hover:not(:disabled) { transform: translate(-2px,-2px); box-shadow: 7px 7px 0 var(--vermillion); }

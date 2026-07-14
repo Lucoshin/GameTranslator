@@ -1,0 +1,21 @@
+[package]
+name = "game-translator-content-book"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+encoding_rs.workspace = true
+quick-xml.workspace = true
+serde.workspace = true
+sha2.workspace = true
+zip.workspace = true
+printpdf.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile = "3.20"
+
+[lints]
+workspace = true

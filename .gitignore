@@ -20,6 +20,7 @@ apps/desktop/src-tauri/icons/AppIcon-*.png
 apps/desktop/src-tauri/icons/Square*.png
 apps/desktop/src-tauri/icons/StoreLogo.png
 apps/desktop/src-tauri/icons/icon.icns
+output/playwright/
 
 # Editors and OS
 .idea/

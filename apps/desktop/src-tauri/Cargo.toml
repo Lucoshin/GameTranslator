@@ -10,8 +10,12 @@ version.workspace = true
 name = "game_translator_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+custom-protocol = ["tauri/custom-protocol"]
+
 [dependencies]
 game-translator-app-core = { path = "../../../crates/app-core" }
+game-translator-content-book = { path = "../../../crates/content-book" }
 game-translator-engine-core = { path = "../../../crates/engine-core" }
 game-translator-engine-renpy = { path = "../../../crates/engine-renpy" }
 game-translator-provider-core = { path = "../../../crates/provider-core" }
@@ -26,6 +30,9 @@ tauri = { version = "2.8", features = [] }
 
 [build-dependencies]
 tauri-build = { version = "2.4", features = [] }
+
+[dev-dependencies]
+tempfile = "3.20"
 
 [lints]
 workspace = true

@@ -1,5 +1,7 @@
 # Desktop State Persistence Implementation Plan
 
+> 2026-07-13 更新：任务进度与恢复快照已统一写入 SQLite；Provider 密钥继续由 Windows Credential Manager 保存。架构依据见 ADR-003。
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** 让重新构建或升级后的桌面程序恢复模型配置、最近项目和语言，并可在未选择项目时查看全部补丁历史。

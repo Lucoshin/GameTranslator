@@ -1,13 +1,8 @@
 use std::{collections::HashMap, hash::BuildHasher, path::Path};
 
-use game_translator_content_core::{
-    ContentError, ContentOutputAdapter, ContentSource, ContentSourceAdapter, ExportRequest,
-    ExportResult, Segment,
-};
-use game_translator_content_game::{RenPyContentAdapter, RpgMakerContentAdapter};
-use game_translator_content_rimworld::{
-    RimWorldLanguagePackOutputAdapter, RimWorldModContentAdapter,
-};
+use game_translator_content_core::{ContentError, ContentSource, ExportResult, Segment};
+
+use crate::AdapterRegistry;
 
 /// Detects a registered content source without modifying its files.
 ///
@@ -15,15 +10,7 @@ use game_translator_content_rimworld::{
 ///
 /// Returns an error when no registered adapter recognizes the selected directory.
 pub fn detect_content(root: &Path) -> Result<ContentSource, ContentError> {
-    let adapters: [&dyn ContentSourceAdapter; 3] = [
-        &RpgMakerContentAdapter,
-        &RenPyContentAdapter,
-        &RimWorldModContentAdapter,
-    ];
-    adapters
-        .into_iter()
-        .find_map(|adapter| adapter.detect(root).ok())
-        .ok_or(ContentError::UnsupportedSource)
+    AdapterRegistry::default().detect(root)
 }
 
 /// Extracts text segments using the adapter identified by a content source.
@@ -32,12 +19,7 @@ pub fn detect_content(root: &Path) -> Result<ContentSource, ContentError> {
 ///
 /// Returns an error when the source format is not registered or cannot be read.
 pub fn extract_content(source: &ContentSource) -> Result<Vec<Segment>, ContentError> {
-    match source.format_id {
-        "game.rpgmaker.mv" | "game.rpgmaker.mz" => RpgMakerContentAdapter.extract(source),
-        "game.renpy" => RenPyContentAdapter.extract(source),
-        "game.rimworld.mod" => RimWorldModContentAdapter.extract(source),
-        _ => Err(ContentError::UnsupportedSource),
-    }
+    AdapterRegistry::default().extract(source)
 }
 
 /// Exports content through the output adapter for its source format.
@@ -51,13 +33,5 @@ pub fn export_content<S: BuildHasher>(
     output_root: &Path,
     target_language: &str,
 ) -> Result<ExportResult, ContentError> {
-    match source.format_id {
-        "game.rimworld.mod" => RimWorldLanguagePackOutputAdapter.export(&ExportRequest {
-            source,
-            translations,
-            output_root,
-            target_language,
-        }),
-        _ => Err(ContentError::UnsupportedSource),
-    }
+    AdapterRegistry::default().export(source, translations, output_root, target_language)
 }

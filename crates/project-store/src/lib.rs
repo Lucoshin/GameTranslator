@@ -3,6 +3,7 @@ mod jobs;
 mod migrations;
 mod projects;
 mod segments;
+mod tasks;
 
 use std::{error::Error, fmt, path::Path};
 
@@ -12,6 +13,7 @@ pub use cache::CacheEntry;
 pub use jobs::BatchRecord;
 pub use projects::ProjectRecord;
 pub use segments::SegmentRecord;
+pub use tasks::{TaskRecord, TaskState};
 
 #[derive(Debug)]
 pub struct StoreError(String);
