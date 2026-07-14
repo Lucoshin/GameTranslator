@@ -143,10 +143,10 @@ export default function App() {
       setBookProjects((current) => current.map((item) => item.id === book.id ? book : item));
     });
 
-  const translateBook = (book: BookProject, chapterId: string) => {
+  const translateBook = (book: BookProject, chapterId: string | null) => {
     if (!provider) {
       setProviderOpen(true);
-      setBookError("请先完成模型配置，再翻译本章");
+      setBookError(`请先完成模型配置，再翻译${chapterId ? "本章" : "全书"}`);
       return;
     }
     setBookBusy(true);

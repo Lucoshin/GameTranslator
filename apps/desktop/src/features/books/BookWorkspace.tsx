@@ -12,7 +12,7 @@ export function BookWorkspace({ project, stage, providerName, busy, error, expor
   error: string | null;
   exportHistory: BookExportRecord[];
   onSave: (project: BookProject) => Promise<void>;
-  onTranslate: (project: BookProject, chapterId: string) => void;
+  onTranslate: (project: BookProject, chapterId: string | null) => void;
   onExport: (project: BookProject, format: BookExportFormat, profile: BookExportProfile) => void;
   onOpenExport: (path: string) => void;
 }) {
@@ -96,7 +96,7 @@ export function BookWorkspace({ project, stage, providerName, busy, error, expor
   const translatedCount = allSegments.filter((segment) => segment.translation.trim().length > 0).length;
 
   if (stage === "overview") {
-    return <BookOverview project={working} translatedCount={translatedCount} reviewedCount={reviewedCount} issueCount={issueCount} onLanguageChange={updateLanguage} />;
+    return <BookOverview project={working} translatedCount={translatedCount} reviewedCount={reviewedCount} issueCount={issueCount} busy={busy} error={error} onLanguageChange={updateLanguage} onTranslate={onTranslate} />;
   }
   if (stage === "export") {
     return <BookExport project={working} busy={busy} issueCount={issueCount} onPublicationChange={updatePublication} onExport={onExport} />;
@@ -137,14 +137,14 @@ export function BookWorkspace({ project, stage, providerName, busy, error, expor
   );
 }
 
-function BookOverview({ project, translatedCount, reviewedCount, issueCount, onLanguageChange }: { project: BookProject; translatedCount: number; reviewedCount: number; issueCount: number; onLanguageChange: (field: "sourceLanguage" | "targetLanguage", code: string) => void }) {
+function BookOverview({ project, translatedCount, reviewedCount, issueCount, busy, error, onLanguageChange, onTranslate }: { project: BookProject; translatedCount: number; reviewedCount: number; issueCount: number; busy: boolean; error: string | null; onLanguageChange: (field: "sourceLanguage" | "targetLanguage", code: string) => void; onTranslate: (project: BookProject, chapterId: string | null) => void }) {
   const segmentCount = project.chapters.reduce((count, chapter) => count + chapter.segments.length, 0);
   return <main className="book-stage-page">
     <header><span>OVERVIEW / 项目概览</span><h2>书籍概览</h2><p>先确认书稿结构与进度，再进入翻译和校对。</p></header>
     <BookLanguageControls project={project} onChange={onLanguageChange} />
     <section className="book-overview-hero">
       <div className="book-overview-cover"><strong>{project.title.slice(0, 4)}</strong><span>{project.format.toUpperCase()}</span></div>
-      <div><span className="book-stage-kicker">{project.format.toUpperCase()} · 书籍项目</span><h3>《{project.title}》</h3><p>{project.sourcePath}</p><div className="book-overview-progress"><i style={{ width: `${bookProgress(project)}%` }} /></div><b>{bookProgress(project)}% 已完成校对</b></div>
+      <div><span className="book-stage-kicker">{project.format.toUpperCase()} · 书籍项目</span><h3>《{project.title}》</h3><p>{project.sourcePath}</p><div className="book-overview-progress"><i style={{ width: `${bookProgress(project)}%` }} /></div><b>{bookProgress(project)}% 已完成校对</b><div className="book-overview-actions"><button type="button" className="book-primary-action" disabled={busy} onClick={() => onTranslate(project, null)}>{busy ? "正在翻译全书…" : "一键翻译全书"}</button><span>将按目录顺序翻译全部 {project.chapters.length} 章</span></div>{error ? <span className="book-operation-error" role="alert">{error}</span> : null}</div>
     </section>
     <section className="book-stat-grid" aria-label="书籍统计">
       <article><span>章节</span><strong>{project.chapters.length}</strong><small>已识别目录结构</small></article>

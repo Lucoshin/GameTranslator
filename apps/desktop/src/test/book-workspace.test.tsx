@@ -212,4 +212,27 @@ describe("书籍工作台桌面集成", () => {
       }),
     }));
   });
+
+  it("从书籍概览一键翻译全书", async () => {
+    vi.mocked(invoke).mockImplementation((command) => {
+      if (command === "load_provider_configuration") return Promise.resolve({ kind: "openai", baseUrl: "https://api.example.com/v1", model: "book-model", performance: "fast" });
+      if (command === "load_desktop_preferences") return Promise.resolve(defaultPreferences);
+      if (command === "list_resumable_tasks") return Promise.resolve([]);
+      if (command === "list_book_projects") return Promise.resolve([book]);
+      if (command === "list_book_export_history") return Promise.resolve([]);
+      if (command === "translate_book_project") return Promise.resolve(book);
+      return Promise.resolve(undefined);
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "打开《海边来信》" }));
+    fireEvent.click(screen.getByRole("button", { name: "概览" }));
+    fireEvent.click(screen.getByRole("button", { name: "一键翻译全书" }));
+
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith("translate_book_project", {
+      input: expect.objectContaining({
+        project: expect.objectContaining({ id: "book-1" }),
+        chapterId: null,
+      }),
+    }));
+  });
 });

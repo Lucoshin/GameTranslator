@@ -135,21 +135,10 @@ fn translate_book(
         source_language,
         target_language,
     } = input;
-    let segments = project
-        .chapters
-        .iter()
-        .filter(|chapter| match chapter_id.as_ref() {
-            Some(id) => id == &chapter.id,
-            None => true,
-        })
-        .flat_map(|chapter| {
-            chapter.segments.iter().map(move |segment| {
-                TranslationSegment::new(&segment.id, &chapter.title, &segment.source)
-            })
-        })
-        .collect::<Vec<_>>();
+    let skip_translated = chapter_id.is_none();
+    let segments = segments_for_translation(&project, chapter_id.as_deref(), skip_translated);
     if segments.is_empty() {
-        return Err("当前范围没有可翻译段落".to_owned());
+        return Err("当前范围没有需要翻译的段落".to_owned());
     }
 
     emit_progress(
@@ -220,6 +209,30 @@ fn translate_book(
         "书稿翻译完成",
     );
     Ok(project)
+}
+
+fn segments_for_translation(
+    project: &BookProject,
+    chapter_id: Option<&str>,
+    skip_translated: bool,
+) -> Vec<TranslationSegment> {
+    project
+        .chapters
+        .iter()
+        .filter(|chapter| match chapter_id {
+            Some(id) => id == chapter.id,
+            None => true,
+        })
+        .flat_map(|chapter| {
+            chapter
+                .segments
+                .iter()
+                .filter(move |segment| !skip_translated || segment.translation.trim().is_empty())
+                .map(move |segment| {
+                    TranslationSegment::new(&segment.id, &chapter.title, &segment.source)
+                })
+        })
+        .collect()
 }
 
 fn apply_translations(project: &mut BookProject, translations: &HashMap<String, String>) -> usize {
@@ -444,6 +457,24 @@ mod tests {
             super::safe_file_stem("书名：测试/终稿?"),
             "书名：测试_终稿_"
         );
+    }
+
+    #[test]
+    fn full_book_translation_collects_all_chapters_but_skips_existing_translations() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("book.txt");
+        fs::write(
+            &source,
+            "第一章 开始\n\nHello world.\n\n第二章 继续\n\nGoodbye world.",
+        )
+        .unwrap();
+        let mut project = parse_book(&source).unwrap();
+        project.chapters[0].segments[0].translation = "你好，世界。".to_owned();
+
+        let segments = super::segments_for_translation(&project, None, true);
+
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].source, "Goodbye world.");
     }
 
     fn export_record(id: &str, project_id: &str, exported_at_unix_ms: u64) -> BookExportRecord {

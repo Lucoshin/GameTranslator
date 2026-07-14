@@ -136,6 +136,8 @@
 .book-overview-hero h3, .book-export-card h3 { margin: 10px 0 4px; font-family: "Noto Serif SC", SimSun, serif; font-size: 25px; font-weight: 600; }
 .book-overview-progress { height: 4px; margin: 24px 0 8px; background: #dcd4c5; }
 .book-overview-progress i { display: block; height: 100%; background: #c44731; }
+.book-overview-actions { display: flex; align-items: center; gap: 14px; margin-top: 22px; }
+.book-overview-actions > span { color: #73786f; font-size: 12px; }
 .book-overview-hero b { font-size: 11px; }
 .book-stat-grid { display: grid; max-width: 920px; grid-template-columns: repeat(4, 1fr); margin-top: 18px; border: 1px solid #dcd4c5; background: #fbf9f3; }
 .book-stat-grid article { display: grid; gap: 7px; padding: 22px; border-right: 1px solid #dcd4c5; }
@@ -322,7 +324,7 @@
 @media (max-width: 760px) {
   .book-workspace { grid-template-rows: 62px 42px 54px minmax(0, 1fr) 28px; }
   .book-header { padding: 0 12px; }
-  .book-primary-action, .book-mark { display: none; }
+  .book-toolbar .book-primary-action, .book-mark { display: none; }
   .book-nav { padding: 0 6px; overflow-x: auto; }
   .book-nav button { min-width: 58px; }
   .book-toolbar { padding: 0 8px 0 12px; }
@@ -332,6 +334,9 @@
   .book-paragraph textarea { font-size: 16px; }
   .book-status-bar span:not(:first-child) { display: none; }
   .book-stage-page { padding: 24px 16px; }
+  .book-overview-hero { grid-template-columns: 110px minmax(0, 1fr); gap: 20px; padding: 20px; }
+  .book-overview-cover { height: 150px; padding: 16px 13px; }
+  .book-overview-actions { align-items: flex-start; flex-direction: column; gap: 8px; }
   .book-metadata-grid, .book-export-grid, .book-layout-settings { grid-template-columns: 1fr; }
   .book-metadata-grid label.wide { grid-column: auto; }
   .book-history-list article { grid-template-columns: 54px minmax(0, 1fr); }
