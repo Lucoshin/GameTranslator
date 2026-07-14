@@ -94,6 +94,7 @@ fn pdf_contains_embedded_chinese_text_and_multiple_publication_pages() {
     let output = directory.path().join("novel.pdf");
     let font = fs::read(r"C:\Windows\Fonts\NotoSerifSC-VF.ttf")
         .or_else(|_| fs::read(r"C:\Windows\Fonts\simfang.ttf"))
+        .or_else(|_| fs::read(r"C:\Windows\Fonts\arial.ttf"))
         .unwrap();
 
     export_pdf(&project, &output, &BookExportProfile::default(), &font).unwrap();
