@@ -26,6 +26,15 @@ describe('书籍工作台', () => {
     }
   })
 
+  it('通过书籍深链接直接恢复工作台', () => {
+    window.location.hash = '#book'
+
+    render(<App />)
+
+    expect(screen.getByRole('navigation', { name: '书籍项目导航' })).toBeInTheDocument()
+    window.location.hash = ''
+  })
+
   it('切换到逐段校对时保持当前段落', () => {
     openBook()
 

@@ -11,7 +11,7 @@ const productNav = [
 ] as const
 
 export default function App() {
-  const [view, setView] = useState<'projects' | 'book'>('projects')
+  const [view, setView] = useState<'projects' | 'book'>(() => window.location.hash === '#book' ? 'book' : 'projects')
 
   return (
     <div className="app-shell">

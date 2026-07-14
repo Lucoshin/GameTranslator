@@ -8,6 +8,8 @@
 node_modules/
 dist/
 coverage/
+*.tsbuildinfo
+output/playwright/
 
 # Editors and OS
 .idea/
