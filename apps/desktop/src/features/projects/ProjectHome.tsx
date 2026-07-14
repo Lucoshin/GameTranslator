@@ -1,4 +1,4 @@
-export function ProjectHome({ onSelect, onEnterOverview, onConfigure, onReturn, providerName, error, scanning }: { onSelect: () => void; onEnterOverview: () => void; onConfigure: () => void; onReturn?: () => void; providerName: string | null; error: string | null; scanning: boolean }) {
+export function ProjectHome({ onSelect, onOpenBook, onEnterOverview, onConfigure, onReturn, providerName, error, scanning }: { onSelect: () => void; onOpenBook: () => void; onEnterOverview: () => void; onConfigure: () => void; onReturn?: () => void; providerName: string | null; error: string | null; scanning: boolean }) {
   return (
     <main className="home-screen">
       <div className="paper-grain" />
@@ -9,14 +9,17 @@ export function ProjectHome({ onSelect, onEnterOverview, onConfigure, onReturn, 
 
       <section className="hero" id="top">
         <div className="hero-copy">
-          <p className="kicker">游戏文本，本地处理</p>
+          <p className="kicker">游戏与书籍，本地处理</p>
           <h1>让另一种语言，<br /><em>住进同一个世界。</em></h1>
           <p className="hero-lead">
-            支持 RPG Maker、Ren'Py 与 RimWorld 模组的本地化工作台。你持有模型密钥，原始内容保持不变。
+            在同一个工作室里处理游戏本地化与书籍译校。你持有模型密钥，原始内容保持不变。
           </p>
           <div className="hero-actions">
             <button className="primary-action" aria-label="选择内容目录" disabled={scanning} onClick={onSelect}>
               {scanning ? "正在识别并提取文本…" : "选择游戏或模组目录"} <span>↗</span>
+            </button>
+            <button className="secondary-action book-entry-action" aria-label="进入书籍翻译工作台" onClick={onOpenBook}>
+              书籍翻译与校对 <span>→</span>
             </button>
           </div>
           {error ? <p className="home-error" role="alert">{error}</p> : null}
@@ -40,7 +43,7 @@ export function ProjectHome({ onSelect, onEnterOverview, onConfigure, onReturn, 
       </section>
 
       <footer className="home-footer">
-        <span>01 自动识别</span><span>02 语境翻译</span><span>03 安全补丁</span>
+        <span>01 选择项目类型</span><span>02 语境翻译</span><span>03 校对与导出</span>
       </footer>
     </main>
   );

@@ -3,6 +3,7 @@ members = [
     "apps/desktop/src-tauri",
     "crates/app-core",
     "crates/content-core",
+    "crates/content-book",
     "crates/content-game",
     "crates/content-rimworld",
     "crates/engine-core",
@@ -37,3 +38,6 @@ sha2 = "0.10"
 quick-xml = "0.39"
 keyring = { version = "3.6", default-features = false, features = ["windows-native"] }
 rfd = "0.15"
+encoding_rs = "0.8"
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+printpdf = "0.9.1"

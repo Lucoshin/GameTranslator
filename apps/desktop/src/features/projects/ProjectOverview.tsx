@@ -2,7 +2,7 @@ import type { TranslationItem } from "../../App";
 
 export type ProjectSummary = { projectPath: string; projectName: string; engine: string; segmentCount: number; previewItems?: TranslationItem[] };
 
-export function ProjectOverview({ project, configured, scanning, onConfigure, onSelect, onStart }: { project: ProjectSummary | null; configured: boolean; scanning: boolean; onConfigure: () => void; onSelect: () => void; onStart: () => void }) {
+export function ProjectOverview({ project, configured, scanning, onSelect, onStart }: { project: ProjectSummary | null; configured: boolean; scanning: boolean; onSelect: () => void; onStart: () => void }) {
   if (!project) {
     return <div className="page overview-page empty-project-overview">
       <section className="page-heading">
@@ -39,7 +39,6 @@ export function ProjectOverview({ project, configured, scanning, onConfigure, on
           <div className="panel-title"><span>翻译准备</span><small>READY CHECK</small></div>
           <div className="check-row ok"><span>✓</span><div><b>源文件只读</b><small>将在独立工作目录处理</small></div></div>
           <div className={configured ? "check-row ok" : "check-row"}><span>{configured ? "✓" : "!"}</span><div><b>{configured ? "模型已配置" : "模型尚未配置"}</b><small>支持 OpenAI-compatible / Ollama</small></div></div>
-          <button className="secondary-action" onClick={onConfigure}>配置模型</button>
           <button className="primary-action full" aria-label="开始翻译" onClick={onStart}>开始翻译 <span>→</span></button>
         </section>
       </div>

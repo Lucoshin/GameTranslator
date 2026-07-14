@@ -1,4 +1,5 @@
 // Tauri command adapters. Business policies belong in app-core.
+mod books;
 mod dto;
 mod events;
 
@@ -1211,6 +1212,13 @@ fn file_sha256(path: &Path) -> Result<String, String> {
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
+            books::import_book_project,
+            books::list_book_projects,
+            books::save_book_project,
+            books::translate_book_project,
+            books::export_book_project,
+            books::list_book_export_history,
+            books::open_book_export_location,
             select_and_scan_project,
             save_provider_configuration,
             load_provider_configuration,

@@ -65,7 +65,7 @@ describe("project flow", () => {
   it("configures the model from the startup screen", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "主界面配置模型" }));
+    fireEvent.click(screen.getByRole("button", { name: "配置模型" }));
 
     expect(screen.getByRole("dialog", { name: "模型接入" })).toBeVisible();
   });
@@ -272,23 +272,24 @@ describe("project flow", () => {
     expect(screen.queryByText("やっと着いた。")).toBeNull();
   });
 
-  it("toggles between the global home and project overview without closing the project", async () => {
+  it("returns to the project center and resumes the current game without rescanning", async () => {
     openProject();
     await screen.findByRole("heading", { name: "RealGame" });
 
-    fireEvent.click(screen.getByRole("button", { name: "返回全局首页" }));
-    expect(screen.getByRole("button", { name: "选择内容目录" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "返回项目中心" }));
+    expect(screen.getByRole("heading", { name: "所有项目" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "继续游戏项目 RealGame" })).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "返回项目概览" }));
+    fireEvent.click(screen.getByRole("button", { name: "继续游戏项目 RealGame" }));
     expect(screen.getByRole("heading", { name: "RealGame" })).toBeVisible();
   });
 
-  it("opens the empty project overview from the startup brand mark without selecting a directory", async () => {
+  it("keeps project stages disabled until content is selected", async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "进入项目概览" }));
-
-    expect(await screen.findByRole("heading", { name: "开始一个项目" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "所有项目" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "概览" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "翻译" })).toBeDisabled();
     expect(invoke).not.toHaveBeenCalledWith("select_and_scan_project");
   });
 
@@ -308,8 +309,7 @@ describe("project flow", () => {
       return Promise.resolve(undefined);
     });
     render(<App />);
-    fireEvent.click(screen.getByRole("button", { name: "进入项目概览" }));
-    await screen.findByRole("heading", { name: "开始一个项目" });
+    await screen.findByRole("heading", { name: "所有项目" });
 
     expect(screen.getByRole("button", { name: "历史" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "历史" }));
@@ -339,7 +339,7 @@ describe("project flow", () => {
     fireEvent.click(screen.getByRole("button", { name: "选择内容目录" }));
     await screen.findByRole("heading", { name: "RealGame" });
 
-    fireEvent.click(screen.getByRole("button", { name: "任务" }));
+    fireEvent.click(screen.getByRole("button", { name: "翻译" }));
     expect(screen.getByText("准备开始翻译")).toBeVisible();
     expect(screen.getByRole("button", { name: /开始翻译/ })).toBeEnabled();
     expect(screen.queryByText("正在请求模型")).toBeNull();

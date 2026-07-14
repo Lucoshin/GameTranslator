@@ -2,13 +2,16 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { ExportPanel } from "./features/export/ExportPanel";
-import { ProjectHome } from "./features/projects/ProjectHome";
 import { ProjectOverview, type ProjectSummary } from "./features/projects/ProjectOverview";
 import { ProviderDrawer, type ProviderConfiguration } from "./features/providers/ProviderDrawer";
 import { PatchHistory, type PatchHistoryEntry } from "./features/history/PatchHistory";
 import { SegmentTable } from "./features/review/SegmentTable";
 import { TranslationProgress } from "./features/translation/TranslationProgress";
-import { LanguageSettings, type Language } from "./features/translation/LanguageSettings";
+import { LanguageSettings, sourceLanguages, targetLanguages, type Language } from "./features/translation/LanguageSettings";
+import { BookWorkspace } from "./features/books/BookWorkspace";
+import { ProjectCenter } from "./features/books/ProjectCenter";
+import type { BookExportFormat, BookExportProfile, BookExportRecord, BookProject } from "./features/books/contracts";
+import { WorkspaceChrome, type WorkspaceStage } from "./features/workspace/WorkspaceChrome";
 import { applicationErrorMessage } from "./api/errors";
 import type { ResumableTask, TranslationItem, TranslationProgressEvent, TranslationProgressState, TranslationRun } from "./api/contracts";
 import "./styles/global.css";
@@ -22,12 +25,17 @@ type UninstallResult = { restoredFileCount: number; removedFileCount: number };
 type DesktopPreferences = { recentProjectPath: string | null; sourceLanguage: Language; targetLanguage: Language };
 
 export default function App() {
+  const [workspaceKind, setWorkspaceKind] = useState<"game" | "library" | "book">("library");
+  const [bookProjects, setBookProjects] = useState<BookProject[]>([]);
+  const [activeBook, setActiveBook] = useState<BookProject | null>(null);
+  const [bookLoading, setBookLoading] = useState(false);
+  const [bookBusy, setBookBusy] = useState(false);
+  const [bookError, setBookError] = useState<string | null>(null);
+  const [bookExportHistory, setBookExportHistory] = useState<BookExportRecord[]>([]);
   const [project, setProject] = useState<ProjectSummary | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [view, setView] = useState<View>("overview");
-  const [homeOpen, setHomeOpen] = useState(false);
-  const [overviewOpen, setOverviewOpen] = useState(false);
   const [providerOpen, setProviderOpen] = useState(false);
   const [provider, setProvider] = useState<ProviderConfiguration | null>(null);
   const [persistenceError, setPersistenceError] = useState<string | null>(null);
@@ -53,13 +61,16 @@ export default function App() {
   const [deletingHistoryId, setDeletingHistoryId] = useState<string | null>(null);
 
   useEffect(() => {
+    void invoke<BookProject[]>("list_book_projects")
+      .then((projects) => setBookProjects(projects ?? []))
+      .catch((error: unknown) => setBookError(`读取书籍项目失败：${applicationErrorMessage(error)}`));
     void invoke<ResumableTask[]>("list_resumable_tasks")
       .then((tasks) => {
-        const latest = tasks.at(0);
+        const latest = tasks?.at(0);
         if (!latest) return;
         setPersistenceError(`检测到未完成任务（${latest.completed}/${latest.total}），再次开始翻译将从缓存继续`);
         return invoke<ProjectSummary>("scan_project_path", { projectPath: latest.projectPath })
-          .then((restored) => { setProject(restored); setOverviewOpen(true); });
+          .then((restored) => { setProject(restored); setWorkspaceKind("game"); });
       })
       .catch((error: unknown) => setPersistenceError(`读取恢复任务失败：${applicationErrorMessage(error)}`));
     void invoke<ProviderConfiguration | null>("load_provider_configuration")
@@ -74,7 +85,7 @@ export default function App() {
         return invoke<ProjectSummary>("scan_project_path", { projectPath: preferences.recentProjectPath })
           .then((restored) => {
             setProject(restored);
-            setOverviewOpen(true);
+            setWorkspaceKind("game");
           })
           .catch((error: unknown) => setPersistenceError(`无法恢复最近项目：${applicationErrorMessage(error)}`));
       })
@@ -96,29 +107,111 @@ export default function App() {
       .catch((error: unknown) => setTranslationError(String(error)));
   };
 
+  const closeBookWorkspace = () => {
+    window.location.hash = "projects";
+    setWorkspaceKind("library");
+  };
+
+  const openBook = (book: BookProject) => {
+    setActiveBook(book);
+    setBookError(null);
+    window.location.hash = "book";
+    setView("translation");
+    setWorkspaceKind("book");
+    void loadBookExportHistory(book.id);
+  };
+
+  const loadBookExportHistory = (projectId: string) => invoke<BookExportRecord[]>("list_book_export_history", { projectId })
+    .then((records) => setBookExportHistory(records ?? []))
+    .catch((error: unknown) => setBookError(`读取书籍导出历史失败：${applicationErrorMessage(error)}`));
+
+  const importBook = () => {
+    setBookLoading(true);
+    setBookError(null);
+    void invoke<BookProject>("import_book_project")
+      .then((book) => {
+        setBookProjects((current) => [book, ...current.filter((item) => item.id !== book.id)]);
+        openBook(book);
+      })
+      .catch((error: unknown) => setBookError(applicationErrorMessage(error)))
+      .finally(() => setBookLoading(false));
+  };
+
+  const saveBook = (book: BookProject) => invoke<void>("save_book_project", { project: book })
+    .then(() => {
+      setActiveBook(book);
+      setBookProjects((current) => current.map((item) => item.id === book.id ? book : item));
+    });
+
+  const translateBook = (book: BookProject, chapterId: string) => {
+    if (!provider) {
+      setProviderOpen(true);
+      setBookError("请先完成模型配置，再翻译本章");
+      return;
+    }
+    setBookBusy(true);
+    setBookError(null);
+    void invoke<BookProject>("translate_book_project", {
+      input: {
+        runId: `book-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        project: book,
+        chapterId,
+        provider: { ...provider, apiKey: null },
+        sourceLanguage: languageFromCode(book.sourceLanguage, sourceLanguages),
+        targetLanguage: languageFromCode(book.targetLanguage, targetLanguages),
+      },
+    })
+      .then((translated) => {
+        setActiveBook(translated);
+        setBookProjects((current) => current.map((item) => item.id === translated.id ? translated : item));
+      })
+      .catch((error: unknown) => setBookError(applicationErrorMessage(error)))
+      .finally(() => setBookBusy(false));
+  };
+
+  const exportBook = (book: BookProject, format: BookExportFormat, profile: BookExportProfile) => {
+    setBookBusy(true);
+    setBookError(null);
+    void invoke<BookExportRecord>("export_book_project", { request: { project: book, format, profile } })
+      .then((record) => setBookExportHistory((current) => [record, ...current.filter((item) => item.id !== record.id)]))
+      .catch((error: unknown) => setBookError(applicationErrorMessage(error)))
+      .finally(() => setBookBusy(false));
+  };
+
+  const openBookExport = (path: string) => {
+    setBookError(null);
+    void invoke("open_book_export_location", { path })
+      .catch((error: unknown) => setBookError(applicationErrorMessage(error)));
+  };
+
   const selectProject = () => {
     setOpenError(null);
     setScanning(true);
     void invoke<ProjectSummary>("select_and_scan_project")
-      .then((result) => { setProject(result); savePreferences(result.projectPath); setHistory([]); setHistoryError(null); setHistoryNotice(null); setHomeOpen(false); setOverviewOpen(true); setView("overview"); })
+      .then((result) => {
+        setProject(result);
+        savePreferences(result.projectPath);
+        setHistory([]);
+        setHistoryError(null);
+        setHistoryNotice(null);
+        setView("overview");
+        setWorkspaceKind("game");
+        window.location.hash = "game";
+      })
       .catch((error: unknown) => setOpenError(String(error)))
       .finally(() => setScanning(false));
   };
 
-  if (homeOpen || (!project && !overviewOpen)) {
-    return <>
-      <ProjectHome
-        error={openError ?? persistenceError}
-        scanning={scanning}
-        providerName={provider?.model ?? null}
-        onConfigure={() => setProviderOpen(true)}
-        onSelect={selectProject}
-        onEnterOverview={() => { setHomeOpen(false); setOverviewOpen(true); setView("overview"); }}
-        onReturn={project ? () => { setHomeOpen(false); setView("overview"); } : undefined}
-      />
-      <ProviderDrawer open={providerOpen} current={provider} onClose={() => setProviderOpen(false)} onSave={saveProvider} />
-    </>;
-  }
+  const changeBookStage = (stage: WorkspaceStage) => {
+    if (stage === "projects") {
+      closeBookWorkspace();
+    } else if (stage === "history") {
+      setView("history");
+      if (activeBook) void loadBookExportHistory(activeBook.id);
+    } else {
+      setView(stage);
+    }
+  };
 
   const startTranslation = () => {
     if (!project) return;
@@ -286,36 +379,49 @@ export default function App() {
       .finally(() => setDeletingHistoryId(null));
   };
 
+  const changeGameStage = (stage: WorkspaceStage) => {
+    if (stage === "projects") {
+      window.location.hash = "projects";
+      setWorkspaceKind("library");
+    } else if (stage === "history") {
+      openHistory();
+    } else {
+      setView(stage);
+    }
+  };
+
+  const closeGameProject = () => {
+    setProject(null);
+    savePreferences(null);
+    setView("overview");
+    setWorkspaceKind("library");
+    window.location.hash = "projects";
+  };
+
+  if (workspaceKind === "library") {
+    const libraryStage: WorkspaceStage = view === "history" ? "history" : "projects";
+    return <>
+      <WorkspaceChrome stage={libraryStage} projectType="studio" projectName="项目中心" providerName={provider?.model ?? null} projectOpen={false} onStageChange={(stage) => stage === "history" ? openHistory() : setView("overview")} onConfigure={() => setProviderOpen(true)}>
+        {libraryStage === "history"
+          ? <main className="content-stage"><PatchHistory entries={history} loading={historyLoading} error={historyError} notice={historyNotice} uninstallingId={uninstallingId} installingId={installingHistoryId} deletingId={deletingHistoryId} onInstall={installHistoryPatch} onUninstall={uninstallPatch} onDelete={deleteHistoryEntry} /></main>
+          : <ProjectCenter projects={bookProjects} gameProject={project} loading={bookLoading} scanning={scanning} error={bookError ?? openError ?? persistenceError} onImportBook={importBook} onSelectGame={selectProject} onOpenBook={openBook} onOpenGame={() => { setView("overview"); setWorkspaceKind("game"); window.location.hash = "game"; }} />}
+      </WorkspaceChrome>
+      <ProviderDrawer open={providerOpen} current={provider} onClose={() => setProviderOpen(false)} onSave={saveProvider} />
+    </>;
+  }
+
+  if (workspaceKind === "book" && activeBook) {
+    return <>
+      <WorkspaceChrome stage={view} projectType="book" projectName={activeBook.title} providerName={provider?.model ?? null} projectOpen status={bookBusy ? "任务进行中" : "自动保存"} onStageChange={changeBookStage} onConfigure={() => setProviderOpen(true)} onCloseProject={closeBookWorkspace}>
+        <BookWorkspace project={activeBook} stage={view} providerName={provider?.model ?? null} busy={bookBusy} error={bookError} exportHistory={bookExportHistory} onSave={saveBook} onTranslate={translateBook} onExport={exportBook} onOpenExport={openBookExport} />
+      </WorkspaceChrome>
+      <ProviderDrawer open={providerOpen} current={provider} onClose={() => setProviderOpen(false)} onSave={saveProvider} />
+    </>;
+  }
+
   return (
-    <div className="app-shell">
-      <aside className="rail">
-        <button className="brand-mark" onClick={() => setHomeOpen(true)} aria-label="返回全局首页">
-          <span>译</span>
-        </button>
-        <nav aria-label="项目导航">
-          <RailButton label="概览" active={view === "overview"} onClick={() => setView("overview")} icon="overview" />
-          <RailButton label="任务" active={view === "translation"} disabled={!project} onClick={() => setView("translation")} icon="task" />
-          <RailButton label="校对" active={view === "review"} disabled={!project} onClick={() => setView("review")} icon="review" />
-          <RailButton label="导出" active={view === "export"} disabled={!project} onClick={() => setView("export")} icon="export" />
-          <RailButton label="历史" active={view === "history"} onClick={openHistory} icon="history" />
-        </nav>
-        <button className="rail-exit" onClick={() => { setProject(null); setOverviewOpen(false); savePreferences(null); }} aria-label="关闭项目">
-          ×
-        </button>
-      </aside>
-
-      <div className="workspace">
-        <header className="topbar">
-          <div>
-            <span className="eyebrow">PROJECT / 本地项目</span>
-            <strong>{project?.projectName ?? "尚未选择项目"}</strong>
-          </div>
-          <div className="topbar-actions">
-            <span className="model-chip"><i />{provider?.model ?? "未配置"}</span>
-            <button className="text-button" aria-label="顶部配置模型" onClick={() => setProviderOpen(true)}>配置模型</button>
-          </div>
-        </header>
-
+    <>
+      <WorkspaceChrome stage={view} projectType="game" projectName={project?.projectName ?? "游戏项目"} providerName={provider?.model ?? null} projectOpen={project !== null} status={translating ? "任务进行中" : project?.engine} onStageChange={changeGameStage} onConfigure={() => setProviderOpen(true)} onCloseProject={closeGameProject}>
         <main className="content-stage">
           {persistenceError ? <div className="notice-banner" role="alert"><span>ERROR</span>{persistenceError}</div> : null}
           {view === "overview" && project ? <LanguageSettings source={sourceLanguage} target={targetLanguage} onSourceChange={(language) => { setSourceLanguage(language); savePreferences(project.projectPath, language, targetLanguage); }} onTargetChange={(language) => { setTargetLanguage(language); savePreferences(project.projectPath, sourceLanguage, language); }} /> : null}
@@ -323,7 +429,6 @@ export default function App() {
             <ProjectOverview
               project={project}
               configured={provider !== null}
-              onConfigure={() => setProviderOpen(true)}
               onSelect={selectProject}
               scanning={scanning}
               onStart={startTranslation}
@@ -374,15 +479,14 @@ export default function App() {
           ) : null}
           {view === "history" ? <PatchHistory entries={history} loading={historyLoading} error={historyError} notice={historyNotice} uninstallingId={uninstallingId} installingId={installingHistoryId} deletingId={deletingHistoryId} onInstall={installHistoryPatch} onUninstall={uninstallPatch} onDelete={deleteHistoryEntry} /> : null}
         </main>
-      </div>
-
+      </WorkspaceChrome>
       <ProviderDrawer
         open={providerOpen}
         current={provider}
         onClose={() => setProviderOpen(false)}
         onSave={saveProvider}
       />
-    </div>
+    </>
   );
 }
 
@@ -390,32 +494,6 @@ function currentTime() {
   return new Date().toLocaleTimeString("zh-CN", { hour12: false });
 }
 
-function RailButton({
-  label,
-  icon,
-  active,
-  disabled = false,
-  onClick,
-}: {
-  label: string;
-  icon: "overview" | "task" | "review" | "export" | "history";
-  active: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button className={active ? "rail-button active" : "rail-button"} disabled={disabled} onClick={onClick} aria-label={label}>
-      <RailIcon icon={icon} />
-      <small>{label}</small>
-    </button>
-  );
-}
-
-function RailIcon({ icon }: { icon: "overview" | "task" | "review" | "export" | "history" }) {
-  const path = icon === "overview" ? <><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></>
-    : icon === "task" ? <><circle cx="12" cy="12" r="8.5" /><path d="m10 8 6 4-6 4z" /></>
-      : icon === "review" ? <><path d="m4 17.5.7-4.2L15.8 2.2l4 4L8.7 17.3z" /><path d="m13.4 4.6 4 4" /><path d="M4 21h16" /></>
-        : icon === "export" ? <><path d="M12 3v11" /><path d="m8 10 4 4 4-4" /><path d="M4 15v5h16v-5" /></>
-          : <><circle cx="12" cy="12" r="8.5" /><path d="M12 7v5l3.5 2" /></>;
-  return <svg className="rail-icon" viewBox="0 0 24 24" aria-hidden="true">{path}</svg>;
+function languageFromCode(code: string, options: Language[]): Language {
+  return options.find((language) => language.code === code) ?? { code, name: code };
 }

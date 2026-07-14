@@ -1,0 +1,18 @@
+.unified-shell { min-height: 100vh; background: #f2eee4; }
+.unified-workspace { min-width: 0; }
+.unified-rail { background: #1f241f; }
+.unified-rail nav { gap: 6px; }
+.unified-rail .rail-button { min-height: 66px; }
+.unified-rail-version { margin-top: auto; color: #727970; font-family: Georgia, serif; font-size: 10px; letter-spacing: .16em; }
+.unified-topbar { height: 72px; padding: 0 26px; background: #fbf9f3; }
+.unified-project-title { display: grid; gap: 4px; }
+.unified-project-title h1, .unified-project-name { margin: 0; font-family: "Noto Serif SC", "Songti SC", SimSun, serif; font-size: 18px; font-weight: 600; }
+.unified-status { color: #49654e; font-size: 11px; }
+.unified-topbar .model-chip { min-height: 36px; border: 1px solid #dcd4c5; background: transparent; cursor: pointer; }
+.unified-topbar .model-chip.inactive { color: #746f66; }
+.unified-shell .content-stage { min-height: 0; }
+@media (max-width: 760px) {
+  .unified-topbar { height: 62px; padding: 0 14px; }
+  .unified-project-title h1 { max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .unified-status { display: none; }
+}
